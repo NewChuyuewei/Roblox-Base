@@ -1,0 +1,17 @@
+# This file lists tools managed by Rokit, a toolchain manager for Roblox projects.
+# For more information, see https://github.com/rojo-rbx/rokit
+#
+# 开发期工具，不计入运行期依赖门禁（README.md §2 门禁 6）。
+# 新增工具：rokit trust <owner/repo> && rokit add <owner/repo> [alias]   （一次一个；首次必须先 trust）
+#
+# 网络：本机直连 GitHub release 下载会被 reset（错误形如 "error decoding response body"）。
+# 若下载失败，设置代理后重跑 rokit install：
+#   HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 rokit install --no-trust-check
+# CI runner 若同样受限，需在 GitLab CI 里配代理变量（Step 8）。
+
+[tools]
+rojo = "rojo-rbx/rojo@7.7.1"
+lune = "lune-org/lune@0.11.1"
+selene = "Kampfkarren/selene@0.32.0"
+stylua = "JohnnyMorganz/StyLua@2.6.0"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"

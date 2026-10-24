@@ -1,0 +1,17 @@
+{
+  "name": "framework",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Deuterium": { "$path": "Deuterium" },
+      "TritiumSQL": { "$path": "TritiumSQL" }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "DeuteriumServer": { "$path": "src/ServerScriptService" }
+    }
+  }
+}

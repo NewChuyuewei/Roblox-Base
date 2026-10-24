@@ -1,0 +1,9 @@
+# Rojo / Luau 本地产物
+place.rbxlx
+place.rbxl
+sourcemap.json
+*.rbxlx
+*.rbxl
+
+# 工具
+.rokit/tool-storage/
