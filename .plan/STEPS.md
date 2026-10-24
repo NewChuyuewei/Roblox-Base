@@ -31,7 +31,7 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1–2 ✅ / 3–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–3 ✅ / 4–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | — | — | — | — |
@@ -44,6 +44,7 @@
 | 2026-10-24 | S3 | ✅ 分支约定生效 | `main` 有 git 守卫阻止直接提交（`git branch -b` + 分支提交已验证） |
 | 2026-10-24 | **Step 1** | ✅ | `rokit.toml` 已提交（`chore(ci): pin dev toolchain via rokit`）；`rokit install` 幂等 exit 0 |
 | 2026-10-24 | **Step 2** | ✅ | `rojo build` exit 0（174,927 B）；`rojo sourcemap` 的 ModuleScript 数 == 69 == `.luau` 文件数 |
+| 2026-10-24 | **Step 3** | ✅ | 5 个文件 429 行；build exit 0；ModuleScript 75（含 Debug 双映射）；StructuredLog 在 Lune 实测通过 |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -132,13 +133,21 @@ lune     = "lune-org/lune@0.11.1"
 
 > 注意：sourcemap 只能证明**结构对**，不能证明 require 字符串在运行时可解析 —— 那要等 Step 10 的 `SelfTest.RunAll()`。
 
-**Step 3 · `Deuterium/Diagnostics/Logging/`（4 文件）**
+**Step 3 · `Deuterium/Diagnostics/Logging/`（5 文件 = 4 + SelfTest）** —— 已完成（2026-10-24）。
 
-按依赖顺序：`LogSink.luau`（后端接口 + 默认 `StudioSink`）→ `StructuredLog.luau`（构造 `{level, tag, msg, data, ts}` 纯表 + 单行格式化，**无副作用，Lune 可测**）→ `Logger.luau`（`Logger.New(tag)`，按 level 过滤，转发 Sink）→ `Debug.luau`（兼容层，导出 `print/warn/err`，tag 为 `"Dr"`；18 个既有文件靠它）。
+实际依赖顺序（与原计划略异：先纯后纯，Sink 反而依赖 StructuredLog 的 `Record` 类型）：
+`StructuredLog.luau`（117）→ `LogSink.luau`（41）→ `Logger.luau`（83）→ `Debug.luau`（25）→ `SelfTest.luau`（163）。共 429 行。
 
-要点：`Debug.luau` **不得** require `ReplicatedStorage.Debug`（自引用）；Scribe 缺失时静默降级到 StudioSink。
+**关键约束（新发现，比计划里写的更重要）**：`ErrorHandler` 已经 require 了 `Debug`（见 `ErrorHandler.Report`），而 `Debug` → `Logger`。因此 **Logging 内部绝不能 require `ErrorHandler`**，否则成环（ErrorHandler→Debug→Logger→ErrorHandler）。结果：这三个模块的程序性错误一律用 `assert`，Logging 成为框架里**唯一不依赖 ErrorHandler 的子系统**。
 
-判据（Studio 命令栏）：`require(game.ReplicatedStorage.Debug).print("hello", 1)` 输出带 `[Dr]` 前缀。
+**另一个必须遵守的约束**：既有 51 处 `Debug.print/warn` 调用是 **`print` 式可变参数**（如 `Debug.print("[Dr.Kernel] Init ok:", name)`），不是 printf。所以 `Logger`/`StructuredLog.Join` 按 `print` 语义用 `\t` 拼接；若做成 `string.format`，这些调用会**静默丢掉第二个参数**。
+
+**Scribe**：全仓库 **0 处**引用 Scribe（`Libraries/Scribe` 不存在），所以“缺失时降级”无需任何探测代码 —— 默认 Sink 直接就是 `StudioSink`，Scribe 接入是 `D6.1b` 的事。没有写任何投机性的探测分支。
+
+判据（部分已达）：
+- `rojo build` 退出码 **0**；sourcemap ModuleScript **75** = 74 个 `.luau` + `Debug` 双映射（`ReplicatedStorage.Debug` 与 `...Logging.Debug` 同一文件），Logging 下 5 个节点均在位。
+- **纯逻辑部分已在 Lune 真实跑通**（见 Step 7 的预答）：`Join("a:", 1, true)` → `a:\t1\ttrue`；`Format(New("warn","Dr.K","hi",{n=3,z="x"}))` → `[warn][Dr.K] hi {n=3 z=x}`；循环引用不挂死。
+- 未验：`Debug.print` 在 Studio 的实际输出前缀、`SelfTest.RunAll()` 的 8 个用例。两者都需要 `game`（下一步 Step 10 才能跑），且静态门禁（stylua/selene/luau-lsp）要等 Step 4–6 才能跑。
 
 **Step 4 · `.luaurc`**
 
@@ -173,10 +182,21 @@ exclude = ["Deuterium/Deuterium.md"]
 
 **Step 7 · headless 探针（15 分钟，决定 CI 测试策略）**
 
-`lune run scripts/probe-headless.luau`，依次探测并记录哪一级成功：① `_G.game = {...}` 后 require 含 `game` 的模块；② `luau.load(source, { environment = { game = ... } })`；③ 都不行 → CI 只跑**纯逻辑**模块，其余靠 Studio 回归。
+`lune run scripts/probe-headless.luau`，依次探测哪一级成功：① `_G.game = {...}` 后 require 含 `game` 的模块；② `luau.load(source, { environment = { game = ... } })`；③ 都不行 → CI 只跑**纯逻辑**模块，其余靠 Studio 回归。
+
+**已部分预答（Step 3 实测，Lune 0.11.1）**：
+
+| 探测 | 结果 |
+| --- | --- |
+| 零 require 的模块（`StructuredLog`） | ✅ **直接可跑**，且 `os.time` / `os.date` 在 Lune 中可用 |
+| `_G.script = { Parent = {...} }` 注入给被 require 的模块 | ❌ **无效** —— 报 `attempt to index nil with 'Parent'`。Lune 中模块环境隔离，调用方设的全局不会传给被 require 的模块 |
+| 仍待测 | `luau.load(src, {environment=...})` 形式能否注入（Step 7 开工时试） |
+
+**推论（影响架构，不只是工具链）**：`script.Parent` 等价物是“零 require 模块”与“可 CI 测试模块”的分界线。因此 **A 档核心逻辑应当把依赖以参数传入（构造器注入），而不是用 `script.Parent` 硬接**：这样每个核心模块都能单独 Lune 测试，而不需要任何 `game`/`script` 垫片。TritiumSQL 的页/B+ 树/MVCC/编解码/请求预算本来就该是这个形状，把它写成硬约束。
 
 判据：`docs/headless.md` 写下探测结果与选定策略（门禁 2 的落地依据，必须留档）。
 > TritiumSQL 的核心（页布局 / B+ 树 / MVCC / 编解码 / 请求预算）**全是纯逻辑**，只有 Port 绑定碰 `game`，所以三级结论都不阻塞 SQL 的 CI 覆盖。
+> 本仓库第一个 CI 可测模块已经是 `Diagnostics/Logging/StructuredLog.luau`（零 require）。
 
 **Step 8 · `.gitlab-ci.yml` 四阶段**
 
@@ -221,10 +241,23 @@ test:
 
 **Step 10 · 全仓库 require 冒烟**（Studio 命令栏）
 
+**前置缺口（Step 3 侦察发现，必须先补）**：`Testing/SelfTest.RunAll()` 会调 `Configuration.Load()` 与 `FeatureFlags.LoadFromConfig()`，而两者都要求
+`ReplicatedStorage.Configs.Deuterium`（一个 ModuleScript 清单）+ `Configs/Deuterium/FeatureFlags`（返回 flag 定义数组）——**这棵 `Configs/` 树目前既不存在也没映射**。需补：
+
+| 文件 | 内容 |
+| --- | --- |
+| `Configs/Deuterium/init.luau` | 清单模块，键为 section 名（至少含 `FeatureFlags`），每值为 table |
+| `Configs/Deuterium/FeatureFlags.luau` | 返回定义数组：每项 `{ name, default, studioOverride? }`，至少包含 `Dr.Security.StrictSchema = true` 与 `Dr.Diagnostics.StructuredLogs`（布尔） |
+| `default.project.json` | 加 `"Configs": { "$path": "Configs" }` → `ReplicatedStorage` |
+
 ```lua
 local ok, err = pcall(function() require(game.ReplicatedStorage.Deuterium.Testing.SelfTest).RunAll() end)
 print(ok, err)
 ```
+
+另外至少要手动验一次 Step 3 的判据（否则那一条永远悬着）：
+`require(game.ReplicatedStorage.Debug).print("hello", 1)` → 应输出形如 `22:41:03 [info][Dr] hello\t1`；
+`require(game.ReplicatedStorage.Debug).warn("x")` → 形如 `... [warn][Dr] x`（走 warn 通道，Studio 警告过滤可见）。
 
 判据：返回 true。**不过就不许继续** —— 它证明 `D1.*`/`D2.2–2.4` 的模块真能加载，而不只是文件存在（风险 R1）。完成后 `Deuterium.md` 里「未验证」全部转 ✅。
 
