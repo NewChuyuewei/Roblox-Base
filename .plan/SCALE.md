@@ -1,293 +1,234 @@
-# 规模标定与能力清单（Scale Calibration）
+# 规模标定
 
-> 回答一个问题：**「堪比 Knit 的 Framework + 堪比小型 PostgreSQL 的 SQL」到底意味着多少模块、多少行、多少个阶段、什么东西必须做。**
-> 本文档是对 `.plan/*.md` 的**加严**，不是替代。读完本文档后，`Deuterium.md` / `TritiumSQL.md` 的功能面以本文档附录 A/B 为准，排期以 `.plan/STEPS.md` 为准。
+> 回答：**「堪比 Knit 的 Framework + 堪比小型 PostgreSQL 的 SQL，两项目互相配合」意味着多少模块、多少行、多少个 Wave、什么东西必须做。**
+> 本文件是**规模、预算、里程碑、功能面**的唯一出处。排期细节见 `Deuterium.md` / `TritiumSQL.md`；执行细节见 `STEPS.md`。
 
 ---
 
-## 1. 两个对标物的实测事实
+## 1. 对标实测
 
 ### 1.1 Knit（可用性对标，**不是规模对标**）
 
 | 指标 | 实测 |
 | --- | --- |
-| 文件数 | 40 |
-| 源码体积 | 105.3 KB |
-| 估算 LOC | ≈ 2,800 |
-| 发布产物 | `Knit.rbxm` 127.8 kB |
-| 提交数 | 525 |
-| 状态 | **已归档**（2020–2023），作者因 Studio 智能提示与 Luau 的发展而停止维护 |
+| 文件 / 体积 / LOC | 40 文件 / 105.3 KB / ≈2,800 行 |
+| 发布产物 / 提交数 | `Knit.rbxm` 127.8 kB / 525 |
+| 状态 | **已归档**（2020–2023） |
 | API 面 | 极薄：`Service` / `Controller` / `Component` + `Signal` + 网络自动桥接 + 生命周期 |
 
-**结论**：Deuterium 当前 69 文件 / 4,894 行，规划 313 个模块，**规模早已是 Knit 的数倍**。「堪比 Knit」对 Deuterium 不是规模目标，而是**可用性目标** —— Knit 有而我们缺的四样东西：
-
-1. **薄入口**：Knit 新人只需理解三个概念；Deuterium 现在把 60+ 模块全暴露，新人无从下手。
-2. **文档站 + CHANGELOG + SemVer + 发布产物**（`.rbxm` / Wally）。
-3. **完整示例**（Knit 有模板项目；Deuterium 只有一个 `Extensions/Demo.luau`）。
-4. **从 Knit 的迁移指南** —— 这是最大的采用驱动力，且成本极低。
+Deuterium 已是 Knit 的数倍规模，所以「堪比 Knit」在这里指**可用性**。Knit 有而我们缺的四样：**薄入口**、**文档站 + CHANGELOG + SemVer + 发布产物**、**完整示例**、**从 Knit 的迁移指南**。落地在 `Deuterium.md` 的 `D7.x`（含新不变量 I13）。
 
 ### 1.2 PostgreSQL（功能面对标，**存储层被封顶**）
 
-PG 主体约 140 万行 C。所谓「小型」通常指 SQLite（≈15 万行）或早期 PG。
+PG 主体约 140 万行 C。可以做到对标的只有五个面：**SQL 表面 · 查询引擎 · 索引 · 事务语义 · 错误语义**。
 
-**必须先说清楚的封顶**：Roblox 上拿不到 PG 的存储/持久化原语 —— 没有 `fsync` 与可控的持久化时机、没有页缓存/缓冲池的任何控制权、没有共享内存与多线程、没有复制协议、没有存储引擎可插拔层。因此**不可能**在存储层与 PG 对标。
+**封顶声明（必须写进首页与每个 release note，决策 D2）**：Roblox 拿不到 PG 的存储原语 —— 无 `fsync` 与持久化时机控制、无页缓存/缓冲池控制权、无共享内存与多线程、无复制协议、无存储引擎可插拔层。因此**不对标 PG 的存储层**，也不假装它不存在。
 
-可以做到对标的是：**SQL 表面 + 查询引擎 + 索引 + 事务语义 + 错误语义**。本计划的目标定义：
+### 1.3 DataStore 上限（已对官方文档核实）
 
-> 在 SQL / 查询 / 索引 / 事务 / 错误码五个面上达到小型关系库的功能对齐；存储层的能力上限由 DataStore 决定，并把这一上限**显式写进文档**而不是假装不存在。
-
-### 1.3 DataStore 上限（已对官方文档核实，替换 `TritiumSQL.md` §0 的「规划假设」）
-
-| 项 | 官方值 | 出处 |
+| 项 | 值 | 设计后果 |
 | --- | --- | --- |
-| Data store name | 50 字符 | Data store error codes and limits |
-| **Key name** | **50 字符** | 同上 |
-| Scope | 50 字符 | 同上 |
-| **Value（key value）** | **4,194,304 字节（4 MiB）** | 同上 |
-| 限速公式 | `rateLimit = baseLimit + perPlayerLimit × numPlayers`，且可由 `DataStoreService:SetRateLimitForRequestType(requestType, baseLimit, perPlayerLimit)` **在运行期覆盖** | DataStoreService 类参考 |
-| 队列语义 | 超限请求进入队列（Set / OrderedSet / Get / OrderedGet 四类），**键级节流**会让该键的请求被跳过而非失败 | Data store error codes and limits |
-| 官方建议 | 「每个玩家用一或少数几个键」以摊薄请求 | Best practices for data stores |
+| data store name / **key name** / scope | **各 50 字符（硬限）** | 键名只有 50 字符是**可行性前提**而非优化：长值一律走短哈希 |
+| 单值大小 | **4,194,304 字节（4 MiB）** | 页目标容量 **4KB**，留足序列化余量 |
+| 限速 | `rateLimit = baseLimit + perPlayerLimit × numPlayers`，可由 `DataStoreService:SetRateLimitForRequestType` **运行期覆盖** | `RequestBudget` 不硬编码常量：启动时显式设限并读回实际值，它是配额的唯一真相来源 |
+| 超限语义 | 进队列（Set / OrderedSet / Get / OrderedGet）；**键级节流**会跳过该键的请求而非失败 | 必须区分「排队 / 键级节流 / 真失败」三态（I12）；**不把排队当丢弃** |
+| 官方建议 | 每个玩家用一或少数几个键 | 与页聚合方向一致 |
 
-**由此产生的三处具体修正**：
-
-1. `Tri.Request.RequestBudget` 不再硬编码常量，改为**启动时调 `SetRateLimitForRequestType` 显式设限并读取实际值**；预算层是唯一的配额真相来源（原来 Step 38 的「探针实测」降级为「核对覆盖是否生效」）。
-2. 「超限」的正确行为是**排队 + 键级节流感知**，不是丢弃（原计划 §5 验收里的「超限丢弃」语义要改成「排队且不丢」；丢弃只适用于我们自己的 P0 保护策略）。
-3. 键名 50 字符是**已核实的硬限**，Step 34 的 `NamespaceCodec` 断言从「规划假设」升级为**架构约束**：`tri:[db]:[table]:[p]:[type]:[val]` 在长值时必须走短哈希，这不是优化而是可行性前提。
-
----
-
-## 2. 规模量化
-
-### 2.1 现状
+### 1.4 现状
 
 | 区域 | 文件 | LOC |
 | --- | --- | --- |
-| `Core` | 21 | 1,432 |
-| `Net` | 23 | 1,870 |
-| `Runtime` | 14 | 958 |
-| `Security` | 2 | 241 |
-| `Testing` | 5 | 304 |
-| `Types` | 3 | 47 |
-| `Extensions` | 1 | 42 |
+| `Core` / `Net` | 21 / 23 | 1,432 / 1,870 |
+| `Runtime` / `Security` | 14 / 2 | 958 / 241 |
+| `Testing` / `Types` / `Extensions` | 5 / 3 / 1 | 304 / 47 / 42 |
 | **合计** | **69** | **4,894** |
 
-规格模块地图：**77 个目录 / 313 个去重模块名** → 文件覆盖率 **≈22%**；平均 71 行/文件（含 SelfTest）。
+规格模块地图：77 目录 / 313 去重模块名 → 文件覆盖率 ≈22%。
 
-### 2.2 目标与工作量（→ 已由 `INTEGRATION.md` §4 取代）
+---
 
-**目标：两项目合计 100,000 行（v1.0 下限）**，含核心 + 测试 + 示例工具，不含文档。逐区域预算表、记分板脚本与判定规则见 **`INTEGRATION.md` §4**。摘要：
+## 2. 100,000 行预算（唯一出处）
 
-| 区域 | 模块 | 小计 LOC |
-| --- | --- | --- |
-| Deuterium 框架本体 | 313 | 35,000 |
-| `Dr.Integration` | 18 | 12,900 |
-| TritiumSQL 引擎本体 | 95 | 31,500 |
-| `Tri.Integration` | 14 | 9,200 |
-| 端到端/场景/故障注入测试 | — | 5,000 |
-| 示例 · 基准 · 工具 · 发布脚本 | — | 6,400 |
-| **合计** | **440** | **100,000**（其中测试 31,500） |
+**目标：v1.0 下限 100,000 行**（核心 + 测试 + 示例工具；不含文档）。
 
-日历换算（按经验速度 300–600 行/有效工作日，含测试、审查与集成）：
+| 区域 | 模块 | 核心 | 测试 | 示例/工具 | 小计 |
+| --- | --- | --- | --- | --- | --- |
+| Deuterium 框架本体 | 313 | 26,000 | 9,000 | — | 35,000 |
+| `Dr.Integration` | 18 | **8,400** | 4,500 | — | 12,900 |
+| TritiumSQL 引擎本体 | 95 | 22,000 | 9,500 | — | 31,500 |
+| `Tri.Integration` | 14 | **5,700** | 3,500 | — | 9,200 |
+| 端到端 / 场景 / 故障注入矩阵 | — | — | 5,000 | — | 5,000 |
+| 示例（≥5）· 基准 · CLI/Studio 工具 · 发布脚本 | — | — | — | 6,400 | 6,400 |
+| **合计** | **440** | **62,100** | **31,500** | **6,400** | **100,000** |
+
+- **测试占 31.5%**，有意为之：440 个模块、可崩溃的存储层、可解析的 SQL 方言，测试低于 25% 等于没测。
+- 这是**下限不是配额**：A 档核心路径按不封顶标准写，实际会到 120,000–135,000 行。低于 100,000 视为功能面缩水，不是「写得紧凑」。
+- 各区域模块清单与逐模块 LOC 见 `INTEGRATION.md` §5（集成层）与各项目文档（本体）。
+- 记分板：`scripts/loc-budget.luau` 输出「实际 / 预算 / 占比 / 判定」，release 分支合计 <100,000 或任一区域 <70% 则**阻断**，日常分支只 warn；数据入 `metrics/loc-history.csv` 得到进度曲线。
+
+### 2.1 工作量与日历
+
+按 300–600 行/有效工作日（含测试、审查、集成）：
 
 | 人力 | 估算 |
 | --- | --- |
 | 单人 | 14 – 22 个月 |
-| 双人（一条框架线 + 一条 SQL 线，在 Step 14.14/16 与四个接缝 §2 交汇） | 8 – 12 个月 |
+| 双人（一条框架线 + 一条 SQL 线，在接缝 `INTEGRATION.md` §2 与 Step 14.14/16 交汇） | 8 – 12 个月 |
 | 双人 + agent 辅助 | 6 – 9 个月（压缩的是写码与测试，不是决策与调试） |
 
-> 这组数字的作用是**防止开局烂尾**：如果实际目标只是「能用的游戏数据层 + 能查的关系表」，正确做法是砍 §4 的 Out 列与 `INTEGRATION.md` 的 G7，而不是压缩每个模块的深度。
->
-> 100,000 是**下限而非配额**：A 档核心路径按不封顶标准写，实际会到 120,000–135,000 行。
-
-### 2.3 里程碑（可演示，不是波次）
-
-| 里程碑 | 内容 | 累计投入 |
-| --- | --- | --- |
-| **M0** | 仓库可构建、CI 四阶段绿、`SelfTest.RunAll()` 过 | Phase 0.1 |
-| **M1** | **端到端纵切**跑通（见 §5），允许脏 | +3 天 |
-| **M2** | `v0.1.0-alpha`：`CREATE TABLE` / `INSERT` / 主键 `SELECT` 走完 Parser→Plan→Index→Page→Port | TritiumSQL Phase 0–2 |
-| **M3** | `v0.5.0-beta`：事务 + WAL + 崩溃恢复 + `UPDATE`/`DELETE`/`JOIN` + 集成 G1/G2/G3 | TritiumSQL Phase 3–5 |
-| **M4** | `v1.0.0`：附录 B 的 v1 列全部落地 | TritiumSQL Phase 6–8 |
-| **M5** | Deuterium `v1.0.0` 发布：Wally `.rbxm` + 文档站 + 示例 + 迁移指南 | Deuterium Phase 7 |
+若实际目标只是「能用的游戏数据层 + 能查的关系表」，正确做法是砍 §5 的 Out 列与集成路径 G7，**不压缩单模块深度**。
 
 ---
 
-## 3. Deuterium 能力清单（可用性对标 Knit）
-
-| # | 能力 | 归属 | 状态 |
-| --- | --- | --- | --- |
-| 1 | 服务/控制器/组件三分（对应 `Provider` + `Extension` + `Component`） | `Core.Container` + `Extensions` | ◐ 有 Provider/Extension，**缺 Component 语义** |
-| 2 | 依赖注入与生命周期 | `Core.Container/Lifecycle` | ✅ |
-| 3 | Signal / EventBus | `Dr.Signal`（**未实现**） | ⛔ 规划在 SERVICE 层，但 Knit 把它当基础设施 → **提前**到 Phase 2 |
-| 4 | 网络自动桥接（方法/信号） | `Net.Bridge` | ✅ 桥存在，**缺 Knit 那种「声明即生成」的开发者体验** |
-| 5 | 类型化定义 + 静态检查 | `Core.Reflection` + `Types` | ◐ 有 Reflection，缺面向用户的重导出 |
-| 6 | **薄入口**（三个概念、五行代码） | 新增 `API/Deuterium.luau` 门面 | ⛔ **必须新增** |
-| 7 | 文档站 | 新增 `docs/`（moonwave 或 MkDocs） | ⛔ |
-| 8 | CHANGELOG + SemVer + 发布产物（`.rbxm` / Wally） | 新增 Phase 7 | ⛔ |
-| 9 | 完整示例项目（≥3 个：最小、带持久化、带客户端复制） | 新增 `examples/` | ⛔ |
-| 10 | 从 Knit 迁移指南 | 新增 `docs/migration-knit.md` | ⛔ |
-| 11 | 基准报告（宣称的 ≥60% 带宽下降等必须有数字） | `Dr.Testing.Perf` + Phase 7 | ⛔ |
-| 12 | 超出 Knit 的部分（安全 / HA / ECS / 诊断 / 数据 / 状态） | 各层 | 见 `.plan/Deuterium.md` §5 |
-
-**判据（Phase 7）**：一个没读过本仓库的人，从零到跑通示例 ≤30 分钟；`Deuterium.luau` 门面导出的公共符号 ≤40 个（其余走 `Dr.*` 命名空间）；CHANGELOG 覆盖全部已发布版本。
-
----
-
-## 4. TritiumSQL 模块清单与能力边界
-
-### 4.1 模块数（≈95）
-
-| 组 | 模块数 | Phase |
-| --- | --- | --- |
-| `Tri.Runtime`（端口 + 3 绑定） | 6 | 0 |
-| `Tri.Catalog`（命名空间 / 目录 / Schema / 序列） | 6 | 0 · 4 |
-| `Tri.Request`（预算 / 队列 / 批处理 / 优先级） | 5 | 1 |
-| `Tri.Storage`（页 / 堆布局 / 页管理 / 缓存 / VACUUM） | 8 | 1 · 8 |
-| `Tri.Index`（B+ 树 / 节点编解码 / 扫描 / 唯一 / 复合 / 部分 / 表达式） | 9 | 2 · 6 |
-| `Tri.Txn`（事务 / MVCC / 锁 / 等待图 / 撤消 / 隔离） | 9 | 3 |
-| `Tri.Wal`（写 / 读 / Checkpoint / 恢复） | 6 | 3 |
-| `Tri.Query`（词法 / 语法 / AST / 语义 / 逻辑 / 优化 / 物理 / 执行 / 计划缓存） | 12 | 4 · 5 |
-| `Tri.Query.Operators`（扫描 3 / 过滤 / 投影 / 排序 / 限制 / 连接 3 / 聚合 2 / 集合运算 4 / 子查询 3） | 18 | 4 · 5 |
-| `Tri.Types`（类型系统 / 转换规则 / 三值逻辑 / 函数库） | 6 | 4 |
-| `Tri.Stat`（统计 / 直方图 / 基数 / 代价模型） | 5 | 5 |
-| `Tri.Ddl`（在线 DDL / 迁移 worker / 版本门 / 视图 / 序列） | 6 | 8 |
-| `Tri.NoSql`（JSON 路径 / 表达式索引 / 时序 / 图） | 5 | 7 |
-| `Tri.Adapters`（Deuterium 桥） | 2 | 8 |
-
-### 4.2 能力边界（**这份列表是 v1 的验收口径**）
-
-#### In — v1 必做
-
-| 类别 | 功能 |
-| --- | --- |
-| **DDL** | `CREATE/DROP TABLE` · `TRUNCATE` · `ALTER TABLE`（加/删列、加/删约束）· `CREATE/DROP INDEX`（唯一/复合/部分/表达式）· `REINDEX` · `CREATE SEQUENCE` / auto-increment |
-| **DML** | `INSERT`（多行 / `DEFAULT VALUES`）· `SELECT`（WHERE / JOIN / GROUP BY / HAVING / ORDER BY / LIMIT / OFFSET / DISTINCT / 别名 / 表达式）· `UPDATE` · `DELETE` · `UPSERT`（`ON CONFLICT DO NOTHING / DO UPDATE`）· `INSERT … RETURNING` |
-| **查询构造** | 标量子查询 · `IN` · `EXISTS` · 相关子查询（correlated）· `UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT` · `CASE` / `COALESCE` / `NULLIF` · 内连接 / 左连接 |
-| **类型** | `INT` / `BIGINT` / `FLOAT` / `NUMERIC(p,s)`（以整数+标度模拟）· `VARCHAR(n)` / `TEXT` / `BOOLEAN` / `TIMESTAMP` / `DATE` / `UUID` / `JSON` / `ARRAY<T>` / `ENUM` |
-| **语义** | **NULL 三值逻辑**（`AND`/`OR`/`NOT` 真值表、`IS NULL`、`IS DISTINCT FROM`）· 显式定义的类型转换矩阵（implicit / assignment / explicit 三级，对齐 PG 的分类） |
-| **约束** | `NOT NULL` · `DEFAULT` · `PRIMARY KEY` · `UNIQUE` · `CHECK` · `FOREIGN KEY`（`CASCADE` / `SET NULL` / `RESTRICT`） |
-| **索引** | B-tree 点查 / 范围 / 复合（列优先级）/ 唯一 / 部分 / 表达式；`ANALYZE` 收集统计 |
-| **事务** | `BEGIN` / `COMMIT` / `ROLLBACK` / `SAVEPOINT` · 四种隔离级别 · 行/页/分区/表四级锁 + 意向锁 · 等待图死锁检测与受害者回滚 · MVCC 快照与可见性 · WAL redo/undo · Checkpoint · 崩溃恢复 |
-| **错误语义** | SQLSTATE 风格错误码表（`23505` unique_violation · `23503` fk_violation · `23502` not_null_violation · `22001` string_data_right_truncation · `22003` numeric_value_out_of_range · `42P01` undefined_table · `42703` undefined_column · `42601` syntax_error · `40001` serialization_failure · `40P01` deadlock_detected · `55P03` lock_not_available · `57014` query_canceled），错误对象含位置、列路径、提示 |
-| **会话/API** | `PreparedStatement` + 参数绑定 + 计划缓存 · 流式结果集 / 分页游标 · `EXPLAIN` / `EXPLAIN ANALYZE`（文本） |
-| **算子** | SeqScan · IndexScan · IndexRangeScan · Filter · Project · Sort（分块归并）· Limit/Offset · NestedLoopJoin · HashJoin · MergeJoin · HashAggregate · StreamAggregate |
-| **优化** | 谓词下推 · 投影消除 · 常量折叠 · 基于统计的索引选择 · Join 重排（小表驱动，**启发式 + 简单代价，不做搜索空间枚举**） |
-| **运维** | `VACUUM` · `CHECKPOINT` · 在线 DDL 渐进迁移 · 监控指标（表统计 / 预算 / 缓存命中率 / 锁等待 / 慢查询日志）· 导出导入（JSON / CSV 文本）· 快照备份 |
-| **NoSQL 扩展** | JSON 路径查询 + 表达式索引 · 时序表 + 降采样 + 滑动窗口 · 图边表 + 双向索引 · 跨服 L2（MemoryStore）热点共享 |
-
-#### In — v1.5（明确排期但不在 v1）
-
-`CREATE VIEW` · CTE（`WITH` / `WITH RECURSIVE`）· `SELECT … FOR UPDATE` 显式锁子句 · 仅索引扫描（index-only scan）· 参数化计划的多计划缓存（generic vs custom plan）· `EXPLAIN (FORMAT JSON)`
-
-#### Out — v2 或永不做
-
-| 项 | 决定 | 理由 |
-| --- | --- | --- |
-| 窗口函数 | v2 | 算子复杂度高，游戏场景需求低 |
-| 存储过程 / 触发器 / PL | v2 | 会引入第二套执行模型 |
-| `GRANT` / `REVOKE` | **永不做** | 权限由 Deuterium RBAC 在最上层裁决；库内做是重复 |
-| 网络线协议 / 多语言驱动 | **永不做** | 无场景 |
-| 物理/流复制、PITR、逻辑订阅 | **永不做** | DataStore 不提供所需原语 |
-| 自定义类型 / 扩展 API / `tsvector` / 几何 / 范围类型 | 永不做 | 收益远低于维护成本 |
-| GIN / GiST / BRIN / Hash 索引 | 永不做 | B-tree + JSON 表达式索引已覆盖目标场景 |
-| 优化器完整搜索空间（DP / Volcano）、并行查询、JIT | **永不做** | 与 DataStore 的请求预算相比，优化器收益上限很低 |
-| 用户声明的声明式分区语法 | 永不做 | 分区是内建策略（`TriSQL.md` §3.3），不暴露语法 |
-| 跨服分布式事务 / 2PC | 永不做 | 用 Saga（Deuterium `Dr.Data.Reliability.Transaction`）在上层表达 |
-
----
-
-## 5. 策略修正：纵切优先（本规模下最重要的一条）
-
-现状规划是**横铺**：按层把模块一个个填满。313 + 95 个模块的规模下，横铺会在第 4–6 个月暴露致命问题 —— 每个模块 200 行看着齐，但**架构接缝从未被真实验证过**，返工发生在最贵的阶段。
-
-**改为纵切优先**：Phase 0 之后立刻插入 **Phase 0.5 · 端到端纵切**（约 3 天，允许脏，产出接缝清单）：
-
-```
-Kernel.Boot
-  → Tri.Catalog.SchemaStore（内存版）
-  → TriSQL.Compile("CREATE TABLE t (id INT PRIMARY KEY, name TEXT)")
-  → TriSQL.Compile("SELECT name FROM t WHERE id = 1")   -- 走 IndexScan
-  → Tri.Index.BPlusTree（内存版）
-  → Tri.Storage.PageManager（内存版）
-  → Tri.Runtime.StorePort → SimulatorPort
-  → 读回并断言结果
-```
-
-规则：
-- 允许内存占位与 `shortcut:` 标注，**不做持久化、不做事务、不做优化器**。
-- 唯一目标：让接缝暴露。产出「接缝清单」写入 `.plan/SEAMS.md`（哪些接口需要正式化、哪些设想不成立）。
-- 接缝清单确认后，才回到横铺顺序继续（`STEPS.md` Step 14 起）。
-
-**质量分档**（规模下的资源分配）：
+## 3. 质量分档（440 模块的资源分配）
 
 | 档 | 模块 | 标准 |
 | --- | --- | --- |
-| **A · 核心路径** | 页管理 · B+ 树 · 事务/MVCC · WAL/恢复 · 解析器 · 优化器 · 锁管理器 · 请求预算 | 边界用例 + 故障注入 + 请求次数断言 + 性能预算，单模块 LOC 上不封顶 |
-| **B · 支撑** | 编解码 · 类型系统 · 统计 · 目录 · 缓存 · 集合/内存/并发原语 | 单测覆盖正常/边界/失败三例 |
-| **C · 外围** | 监控面板 · 导出导入 · 诊断 · Util · 文档站 | 够用即止，允许薄实现 + `shortcut:` |
+| **A · 核心路径** | 页管理 · B+ 树 · 事务/MVCC · WAL/恢复 · 解析器 · 优化器 · 锁管理器 · 请求预算 · **G4 复制 · G5 RLS** | 边界用例 + 故障注入 + 请求次数断言 + 性能预算；**单模块 LOC 不封顶**（250–600+） |
+| **B · 支撑** | 编解码 · 类型系统 · 统计 · 目录 · 缓存 · 集合/内存/并发原语 · 其余 G 路径 | 单测覆盖正常 / 边界 / 失败三例（120–250 行） |
+| **C · 外围** | 监控面板 · 导出导入 · 诊断 · Util · 文档站 | 够用即止，允许薄实现 + `shortcut:` 标注（40–120 行） |
 
 ---
 
-## 6. 路线图修订
+## 4. 里程碑（可演示，不是 Wave）
 
-### 6.1 Deuterium
-
-| 变更 | 内容 |
-| --- | --- |
-| 新增 **Phase 0.5** | 端到端纵切（§5），插入在 Phase 0.4 之后、Step 14 之前 |
-| `Dr.Signal` **提前** | 从 SERVICE 层规划位置提前到 Phase 2（Knit 把 Signal 当基础设施，没有它薄入口立不住） |
-| 新增 **Phase 7 · 发布与生态** | 薄入口门面 `API/Deuterium.luau` · 文档站 · `examples/`（≥3）· `docs/migration-knit.md` · CHANGELOG + SemVer · `.rbxm` + Wally 发布 · 基准报告 · `Component` 语义补件 |
-| 新增 **Phase 8 · Studio 插件**（可选） | 代码生成 / 类型导出，对标 Knit 的插件体验；v1 不阻塞发布 |
-
-### 6.2 TritiumSQL
-
-从 9 个 Phase 扩到 **12 个**：
-
-| Phase | 内容 | 新增/变更 |
+| 里程碑 | 内容 | 累计投入 |
 | --- | --- | --- |
-| 0 | 端口 · 命名空间 · 目录 · Schema · 序列 | 不变 |
-| **0.5** | **端到端纵切**（内存版全链） | **新增** |
-| 1 | 请求管线 · 页 · CRUD · L1 缓存 | 不变（`RequestBudget` 改为显式设限，见 §1.3） |
-| 2 | B+ 树（主键）+ 索引扫描 | 不变 |
-| 3 | 事务 · MVCC · 锁 · WAL · 崩溃恢复 · **SQLSTATE 错误码** | **加错误码表** |
-| 4 | 词法/语法/语义/逻辑计划 · 核心算子 · 类型系统 · **三值逻辑** · PreparedStatement | **加三值逻辑与类型转换矩阵** |
-| 5 | 连接算子 · 优化器 · 统计 · EXPLAIN · **子查询 · 集合运算** | **加子查询与集合运算（原属 v1.5，现提到 v1）** |
-| 6 | 二级/复合/唯一/部分/**表达式**索引 | 加表达式索引 |
-| 7 | NoSQL 扩展（JSON/时序/图） | 不变 |
-| 8 | 在线 DDL · VACUUM · 监控 · 导出导入 · 快照 · **适配器** | 加导出导入与快照 |
-| **9** | **v1.0 硬化**：故障注入矩阵 · 压力测试 · 性能预算达成 · 文档 | **新增** |
-| **10** | **发布**：`vospek/tritiumsql` Wally 包 · API 文档 · 迁移与兼容策略 | **新增** |
-| **11** | v1.5 功能（视图 · CTE · `FOR UPDATE` · 仅索引扫描 · JSON 格式 EXPLAIN） | **新增** |
+| **M0** | 仓库可构建、CI 四阶段绿、`SelfTest.RunAll()` 过 | Phase 0.1（Step 1–12） |
+| **M1** | **端到端纵切**跑通（内存版全链），产出 `SEAMS.md` | +3 天（Step 16.5） |
+| **M2** | `v0.1.0-alpha`：`CREATE TABLE` / `INSERT` / 主键 `SELECT` 走完 Parser→Plan→Index→Page→Port | TritiumSQL `T0`–`T2` |
+| **M3** | `v0.5.0-beta`：事务 + WAL + 崩溃恢复 + `UPDATE`/`DELETE`/`JOIN` **+ 集成 G1/G2/G3** | `T3`–`T5` + G1–G3 |
+| **M4** | `v1.0.0`（引擎）：附录 B 的 In 列全部落地 | `T6`–`T11` |
+| **M5** | Deuterium `v1.0.0` 发布：Wally `.rbxm` + 文档站 + 示例 + 迁移指南 | `D7.x` |
 
 ---
 
-## 7. 规模自身的风险
+## 5. 能力面：In / Out（v1 验收口径）
 
-| 风险 | 等级 | 对策 |
-| --- | --- | --- |
-| **两个项目各自跑通但从未合练**（集成在最后才发现接缝不成立） | 极高 | `INTEGRATION.md` §2 的四个接缝在 Phase 0.5 纵切时就冻结；G1–G3 排在 M3 而非最后 |
-| **广度压倒深度**：408 个模块每个都「有」，但核心路径不够健壮 | 极高 | §5 纵切优先 + A/B/C 质量分档；核心路径单模块不封顶，外围允许薄 |
-| 规模导致决策蔓延（每个模块都要重新讨论接口） | 高 | 先出接缝清单（Phase 0.5），接口冻结后再横铺；新增接口走 ADR |
-| 单人推进 12–20 个月，中途失去动力 | 高 | 里程碑 M0–M5 全部是**可演示产物**；每个 Phase 末打 tag |
-| 对标 PG 的功能面被外部当作承诺，而存储层封顶被忽略 | 中 | §1.2 的封顶声明写进 `README.md` 首页与发布说明 |
-| 官方限额与队列语义误解（把「排队」当「失败」） | 中 | §1.3 已核实并回写；`RequestBudget` 实现必须区分「排队」「键级节流」「真失败」三种状态 |
-| 两个项目并行时接口漂移（Port 契约、Codec） | 中 | Step 14.14 与 Step 16 是唯一交汇点，接口冻结后加契约测试（`Tri/Testing/PortContract.luau`） |
+### In — v1 必做
 
----
-
-## 附录 A · 对既有计划文档的修订清单
-
-| 文档 | 修订 |
+| 类别 | 功能 |
 | --- | --- |
-| `.plan/README.md` | 关键路径插入 Phase 0.5；门禁 7（预算门禁）补「排队而非丢弃」；§开放决策 D2 补「TritiumSQL 存储层封顶」的说明 |
-| `.plan/Deuterium.md` | 新增 Phase 7 / Phase 8；`Dr.Signal` 提前到 Phase 2；§0 增补 I13（薄入口：对外公共符号必须经 `API/Deuterium.luau` 收口） |
-| `.plan/TritiumSQL.md` | §0 的「规划假设」替换为 §1.3 的**已核实值**；§12 扩到 12 个 Phase；功能面以本文档附录 B 为准；「超限丢弃」改为「排队 + 键级节流」 |
-| `.plan/STEPS.md` | Phase 0.4 之后插入 Step 16.5「端到端纵切」；Step 38 改为「核对 `SetRateLimitForRequestType` 覆盖是否生效」 |
+| **DDL** | `CREATE/DROP TABLE` · `TRUNCATE` · `ALTER TABLE`（加/删列、加/删约束）· `CREATE/DROP INDEX`（唯一/复合/部分/表达式）· `REINDEX` · `CREATE SEQUENCE` |
+| **DML** | `INSERT`（多行 / `DEFAULT VALUES`）· `SELECT`（WHERE / JOIN / GROUP BY / HAVING / ORDER BY / LIMIT / OFFSET / DISTINCT / 别名 / 表达式）· `UPDATE` · `DELETE` · `UPSERT` · `INSERT … RETURNING` |
+| **查询构造** | 标量子查询 · `IN` · `EXISTS` · 相关子查询 · `UNION` / `UNION ALL` / `INTERSECT` / `EXCEPT` · `CASE` / `COALESCE` / `NULLIF` · 内连接 / 左连接 |
+| **类型** | `INT` / `BIGINT` / `FLOAT` / `NUMERIC(p,s)`（整数+标度模拟）· `VARCHAR(n)` / `TEXT` / `BOOLEAN` / `TIMESTAMP` / `DATE` / `UUID` / `JSON` / `ARRAY<T>` / `ENUM` |
+| **语义** | **NULL 三值逻辑**（真值表、`IS NULL`、`IS DISTINCT FROM`）· 类型转换矩阵（implicit / assignment / explicit 三级） |
+| **约束** | `NOT NULL` · `DEFAULT` · `PRIMARY KEY` · `UNIQUE` · `CHECK` · `FOREIGN KEY`（`CASCADE` / `SET NULL` / `RESTRICT`） |
+| **索引** | B-tree 点查 / 范围 / 复合 / 唯一 / 部分 / 表达式；`ANALYZE` 统计 |
+| **事务** | `BEGIN`/`COMMIT`/`ROLLBACK`/`SAVEPOINT` · 四种隔离级别 · 四级锁 + 意向锁 · 等待图死锁检测与受害者回滚 · MVCC 快照与可见性 · WAL redo/undo · Checkpoint · 崩溃恢复 |
+| **错误语义** | SQLSTATE 风格错误码（`23505`/`23503`/`23502`/`22001`/`22003`/`42P01`/`42703`/`42601`/`40001`/`40P01`/`55P03`/`57014`），错误对象含位置、列路径、提示 |
+| **会话/API** | `PreparedStatement` + 参数绑定 + 计划缓存 · 流式结果集 / 分页游标 · `EXPLAIN` / `EXPLAIN ANALYZE` |
+| **算子** | SeqScan · IndexScan · IndexRangeScan · Filter · Project · Sort（分块归并）· Limit/Offset · NestedLoop/Hash/Merge Join · HashAggregate · StreamAggregate |
+| **优化** | 谓词下推 · 投影消除 · 常量折叠 · 基于统计的索引选择 · Join 重排（启发式 + 简单代价，**不枚举搜索空间**） |
+| **运维** | `VACUUM` · `CHECKPOINT` · 在线 DDL 渐进迁移 · 监控指标 · 导出导入（JSON/CSV）· 快照备份 |
+| **NoSQL 扩展** | JSON 路径查询 + 表达式索引 · 时序表 + 降采样 + 滑动窗口 · 图边表 + 双向索引 · 跨服 L2（MemoryStore）热点共享 |
+| **集成** | `G1`–`G10`（`INTEGRATION.md`） |
 
-## 附录 B · v1 功能清单（验收口径，等同于 §4.2 的 In 列）
+### In — v1.5（排期但不在 v1）
 
-以 §4.2 的 In — v1 表格为唯一口径。v1.0 发布前逐行勾选；任何未勾选项必须移入 v1.5 并写明理由，不允许「默认算做过」。
+`CREATE VIEW` · CTE（`WITH` / `WITH RECURSIVE`）· `SELECT … FOR UPDATE` · 仅索引扫描 · 参数化计划（generic vs custom）· `EXPLAIN (FORMAT JSON)`
+
+### Out — v2 或永不做
+
+| 项 | 决定 |
+| --- | --- |
+| 窗口函数 · 存储过程/触发器/PL | v2（会引入第二套执行模型） |
+| `GRANT` / `REVOKE` | **永不做** —— 权限由 `Dr.Security` RBAC 在上层裁决 |
+| 线协议 / 多语言驱动 · 物理与流复制 · PITR · 逻辑订阅 | **永不做** —— 无场景 / DataStore 不提供原语 |
+| 自定义类型 / 扩展 API / `tsvector` / 几何 / 范围类型 | 永不做 |
+| GIN / GiST / BRIN / Hash 索引 | 永不做 —— B-tree + JSON 表达式索引已覆盖 |
+| 优化器完整搜索空间（DP/Volcano）· 并行查询 · JIT | **永不做** —— 相对请求预算，收益上限很低 |
+| 用户声明的声明式分区语法 | 永不做 —— 分区是内建策略 |
+| 跨服分布式事务 / 2PC | 永不做 —— 用 Saga 在上层表达 |
 
 ---
 
-未读/未验证：PostgreSQL 的功能分类（implicit/assignment/explicit 转换三级、SQLSTATE 具体码值）依印象给出、**未逐一核对 PG 文档**，Step 34 与 Phase 3/4 动工前需对一遍官方附录；`rokit` 安装脚本可用性、Lune 环境注入能力仍是 `.plan/STEPS.md` Step 7 的探测项；LOC 与工作量区间是经验估算，误差可能达 ±50%。风险：§4.2 的 In 列如果全按 v1 承诺，M4 的日历估算会偏乐观 1–2 个月。
+## 6. 纵切优先（本规模下最重要的策略）
+
+按层横铺到 440 个模块，会在第 4–6 个月暴露致命问题：每个模块 200 行看着齐，但**架构接缝从未被真实验证**，返工发生在最贵的阶段。
+
+**改为纵切优先** —— Phase 0.4 之后立刻插入 **Phase 0.5 · 端到端纵切**（Step 16.5，约 3 天，允许脏）：
+
+```
+Kernel.Boot → SchemaStore（内存）→ TriSQL.Compile("CREATE TABLE t (id INT PRIMARY KEY, name TEXT)")
+→ Compile("SELECT name FROM t WHERE id = 1") → IndexScan（内存 B+ 树）
+→ PageManager（内存页）→ StorePort → SimulatorPort → 读回断言
+```
+
+规则：允许内存占位与 `shortcut:`；**不做**持久化、事务、优化器。唯一目标是让接缝暴露，产出 `.plan/SEAMS.md`（需正式化的接口 / 被证伪的设想 / 需新增的模块）。**接缝清单确认后才回到横铺。** Phase 0.5 同时冻结 `INTEGRATION.md` §2 的四个接缝。
+
+---
+
+## 7. 对既有路线图的增量（只写 delta，完整路线图在项目文档）
+
+| 位置 | 增量 |
+| --- | --- |
+| Deuterium | 新增 `D0.5` 纵切、`D2.0` `Dr.Signal`（提前，Knit 把它当基础设施）、`D7.x` 发布与生态、`D8` Studio 插件；`D5.1–D5.3` 集合/内存/缓冲抽到 `D0.3`；`D6.1` 日志抽到 `D0.1` |
+| TritiumSQL | 原 9 个 Phase 扩到 12：新增 `T0.5` 纵切、`T9` 硬化、`T10` 发布、`T11` v1.5；请求管线与 L1 缓存从「企业级特性」上移到 `T1`；**不做** `Tri.Format`（用 I9 的共用 Codec） |
+| 集成 | 新增 `G1`–`G10` 与 `Dr.Integration`(18) / `Tri.Integration`(14) 共 32 模块、14,100 行核心 |
+| 规格修订 | 见 `Deuterium.md` §2 的修订清单（应用于 `Deuterium/Deuterium.md`） |
+
+---
+
+## 附录 A · v1 功能追踪矩阵
+
+每行：**功能 → 模块 → Wave → Step → 验收**。release 前逐行勾选；未勾选项必须移入 v1.5 并写明理由，**不允许「默认算做过」**。
+
+| 功能 | 模块 | Wave | Step | AC |
+| --- | --- | --- | --- | --- |
+| 端口 + 三绑定 | `Tri.Runtime.*` | `T0` | 30–33 | AC-T0 |
+| 键名编码（≤50 字符） | `Tri.Catalog.NamespaceCodec` | `T0` | 34 | AC-T0 |
+| Schema / 目录 / 序列 | `Tri.Catalog.*` | `T0` | 35 | AC-T0 |
+| 请求预算 + 三态语义 | `Tri.Request.RequestBudget` | `T1` | 36 | AC-T1 |
+| 优先级队列 + 批处理 | `Tri.Request.*` | `T1` | 37 | AC-T1 |
+| 页与堆布局 | `Tri.Storage.Page/HeapLayout` | `T1` | 39 | AC-T1 |
+| 页管理（读写/分裂） | `Tri.Storage.PageManager` | `T1` | 40 | AC-T1 |
+| L1 页缓存 | `Tri.Storage.PageCache` | `T1` | 41 | AC-T1 |
+| 基础 CRUD | `Tri.Storage.RowStore` | `T1` | 42 | AC-T1 |
+| B+ 树（主键/聚簇） | `Tri.Index.BPlusTree/NodeCodec` | `T2` | 44–45 | AC-T2 |
+| 索引扫描（点/范围） | `Tri.Index.IndexScan` | `T2` | 46 | AC-T2 |
+| 唯一约束 | `Tri.Index.UniqueGuard` | `T2` | 47 | AC-T2 |
+| 事务 / 隔离级别 / 保存点 | `Tri.Txn.*` | `T3` | — | AC-T3 |
+| MVCC 快照与可见性 | `Tri.Txn.Mvcc` | `T3` | — | AC-T3 |
+| 死锁检测与受害者选择 | `Tri.Txn.WaitForGraph` | `T3` | — | AC-T3 |
+| WAL + Checkpoint + 崩溃恢复 | `Tri.Wal.*` | `T3` | — | AC-T3 |
+| SQLSTATE 错误码表 | `Tri.Txn/Query` 错误层 | `T3` | — | AC-T3 |
+| 词法/语法/语义分析 | `Tri.Query.{Lexer,Parser,Analyzer}` | `T4` | — | AC-T4 |
+| 逻辑/物理计划 + 核心算子 | `Tri.Query.*` / `Operators` | `T4` | — | AC-T4 |
+| 类型系统 + 三值逻辑 + 转换矩阵 | `Tri.Types.*` | `T4` | — | AC-T4 |
+| PreparedStatement + 计划缓存 | `Tri.Query.PreparedStatement` | `T4` | — | AC-T4 |
+| 连接算子（NL/Hash/Merge） | `Tri.Query.Operators` | `T5` | — | AC-T5 |
+| 子查询（标量/IN/EXISTS/相关） | `Tri.Query.Operators` | `T5` | — | AC-T5 |
+| 集合运算（UNION/INTERSECT/EXCEPT） | `Tri.Query.Operators` | `T5` | — | AC-T5 |
+| 优化器（下推/折叠/索引选择/Join 重排） | `Tri.Query.Optimizer` + `Tri.Stat` | `T5` | — | AC-T5 |
+| `EXPLAIN` / `EXPLAIN ANALYZE` | `Tri.Query.*` | `T5` | — | AC-T5 |
+| 二级/复合/唯一/部分/**表达式**索引 | `Tri.Index.*` | `T6` | — | AC-T6 |
+| JSON 路径 + 函数索引 / 时序 / 图 | `Tri.NoSql.*` | `T7` | — | AC-T7 |
+| 在线 DDL + VACUUM | `Tri.Ddl.*` / `Tri.Storage.Vacuum` | `T8` | — | AC-T8 |
+| 监控 + 导出导入 + 快照 | `Tri.Stat` / `Tri.Ddl` | `T8` | — | AC-T8 |
+| 会话态持久化 + Saga | `Dr.Integration.Persistence.*` | G3 | 52–53 | AC-G3 |
+| DB→客户端复制 | `ChangeLog` + `Replication.*` | G4 | 54, 62 | AC-G4 |
+| 行级安全 | `RowSecurity` + `Security.*` | G5 | 55, 63 | AC-G5 |
+| 查询结果传输 | `Net/ResultCodec` + `QueryService` | G6 | 56 | AC-G6 |
+| ECS 实体持久化 | `Ecs/WorldPersist` | G7 | 57 | AC-G7 |
+| 可观测（span/metric/慢查询） | `Observe/*` + `Telemetry` | G8 | 57, 64 | AC-G8 |
+| 薄入口 + 文档站 + 示例 + 迁移指南 | `API/Deuterium.luau` 等 | `D7.x` | — | AC-D7 |
+
+## 附录 B · 发布门禁清单
+
+| # | 条件 |
+| --- | --- |
+| 1 | 门禁 1–9 全绿（`README.md` §2），其中 `test` 阶段不是 `allow_failure` |
+| 2 | 附录 A 的 In 行逐条勾选完毕 |
+| 3 | LOC 记分板：合计 ≥100,000，各区域 ≥ 预算 70% |
+| 4 | 测试占比 ≥ 25%；A 档模块每个都有故障注入用例 |
+| 5 | 安全：`AC-G5` 全部越权用例被拦；审计日志字段完整 |
+| 6 | 一致性：`AC-G4` 顺序/幂等/断线补齐全过 |
+| 7 | 可复现：CI 全绿两次连续运行（排除偶发） |
+| 8 | 文档：封顶声明（§1.2）在 README 首页与 release note；CHANGELOG 覆盖本版 |
+| 9 | 外部依赖：三个以内且审计留档在 `MEMORY.md` |
+
+---
+
+未读/未验证：PG 的功能分类（转换三级、SQLSTATE 具体码值）依印象给出、**未逐一核对 PG 官方附录**，`T3`/`T4` 动工前需对一遍；LOC 与工作量是经验估算，误差可能达 ±50%。风险：附录 A 的 In 列若全按 v1 承诺，`M4` 日历会偏乐观 1–2 个月。
