@@ -31,7 +31,7 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1 ✅ / 2–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–2 ✅ / 3–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | — | — | — | — |
@@ -43,6 +43,7 @@
 | 2026-10-24 | S1 | ✅ 工具链就位 | `rokit list` 列出 5 工具；五个二进制直连 `--version` 均有输出 |
 | 2026-10-24 | S3 | ✅ 分支约定生效 | `main` 有 git 守卫阻止直接提交（`git branch -b` + 分支提交已验证） |
 | 2026-10-24 | **Step 1** | ✅ | `rokit.toml` 已提交（`chore(ci): pin dev toolchain via rokit`）；`rokit install` 幂等 exit 0 |
+| 2026-10-24 | **Step 2** | ✅ | `rojo build` exit 0（174,927 B）；`rojo sourcemap` 的 ModuleScript 数 == 69 == `.luau` 文件数 |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -97,7 +98,7 @@ lune     = "lune-org/lune@0.11.1"
 
 判据：`rokit.toml` 在仓库根且已被 git 跟踪；`rokit install` 幂等。**AC-D0.1 尚未达成**（Step 2–12 未做）。
 
-**Step 2 · `default.project.json`（Rojo 映射）**
+**Step 2 · `default.project.json`（Rojo 映射）** —— 已完成（2026-10-24）。
 
 ```json
 {
@@ -107,8 +108,7 @@ lune     = "lune-org/lune@0.11.1"
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
       "Deuterium": { "$path": "Deuterium" },
-      "TritiumSQL": { "$path": "TritiumSQL" },
-      "Debug": { "$path": "Deuterium/Diagnostics/Logging/Debug.luau" }
+      "TritiumSQL": { "$path": "TritiumSQL" }
     },
     "ServerScriptService": {
       "$className": "ServerScriptService",
@@ -118,9 +118,19 @@ lune     = "lune-org/lune@0.11.1"
 }
 ```
 
-要点：现有代码 require 的是 `ReplicatedStorage.Debug` 与 `ReplicatedStorage.Deuterium.*`，此映射**不改任何 require 字符串**即可对上（决策 D8）。`Debug` 指向框架内部实现，不新开 `src/` 根。`Deuterium/Deuterium.md` 是非 Lua 文件，Rojo 会跳过；**若 build 报未知扩展名**，把它移到 `docs/Deuterium.md` 并同步引用。
+附带 `.gitignore`（`place.rbxlx` / `sourcemap.json` / `*.rbxl*`）避免 Step 8 生成的产物混入提交。
 
-判据：`rojo build -o /tmp/place.rbxlx` 退出码 0；`src/ServerScriptService/` 已建（可先放 `.gitkeep`）。
+**与计划的修正**：`Debug` 节点**不在本 Step 加** —— 它指向的 `Deuterium/Diagnostics/Logging/Debug.luau` 尚未存在，而 `$path` 指向不存在的文件会让 `rojo build` 失败。该节点随文件一起在 **Step 3** 加，届时二者同一次提交。
+
+**实测补充**
+
+1. `Deuterium/Deuterium.md` 与 `.gitkeep` 这类非 Lua 文件 **Rojo 会静默跳过**（不报未知扩展名），无需把它们移出树。原计划里「若 build 报错则移到 `docs/`」的预案作废。
+2. **空目录会被 Rojo 拒绝**（`$path` 不存在即报错），而 git 不跟踪空目录 → 新建的空目录必须放 `.gitkeep`，否则**全新 clone 后 CI 的 build 会挂**。已加 `TritiumSQL/.gitkeep` 与 `src/ServerScriptService/.gitkeep`。
+3. `rojo sourcemap` 是比 `build` 更精细的验证手段，也是 Step 8 的 types 阶段要用的命令。
+
+判据（已达）：`rojo build -o /tmp/place.rbxlx` 退出码 **0**，产物 174,927 字节；`rojo sourcemap` 得到的 **ModuleScript 数 == 69 == 仓库 `.luau` 文件数**（另有 21 Folder / 92 节点），关键节点 `Deuterium/Core/Container/Kernel` 等抽查存在，`Debug` 节点按预期为 0。
+
+> 注意：sourcemap 只能证明**结构对**，不能证明 require 字符串在运行时可解析 —— 那要等 Step 10 的 `SelfTest.RunAll()`。
 
 **Step 3 · `Deuterium/Diagnostics/Logging/`（4 文件）**
 
