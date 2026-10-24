@@ -30,11 +30,20 @@
 
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| S1–S3 | ☐ | 20 | ☐ | 44–47 | ☐ |
-| 1–12 | ☐ | 21 | ☐ | 50–57 | ☐ |
+| S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
+| 1 ✅ / 2–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | — | — | — | — |
+
+### 完成日志
+
+| 日期 | Step | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 2026-10-24 | S1 | ✅ 工具链就位 | `rokit list` 列出 5 工具；五个二进制直连 `--version` 均有输出 |
+| 2026-10-24 | S3 | ✅ 分支约定生效 | `main` 有 git 守卫阻止直接提交（`git branch -b` + 分支提交已验证） |
+| 2026-10-24 | **Step 1** | ✅ | `rokit.toml` 已提交（`chore(ci): pin dev toolchain via rokit`）；`rokit install` 幂等 exit 0 |
+| — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
 
@@ -64,7 +73,29 @@ rokit install
 
 ## 二、`D0.1` · 让仓库可运行（Step 1–12）
 
-**Step 1 · `rokit.toml`**（S1 已生成）→ `git add` 并提交 `chore(ci): pin dev toolchain via rokit`。
+**Step 1 · `rokit.toml`** —— 已完成（2026-10-24）。
+
+```toml
+[tools]
+rojo     = "rojo-rbx/rojo@7.7.1"
+selene   = "Kampfkarren/selene@0.32.0"
+stylua   = "JohnnyMorganz/StyLua@2.6.0"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"
+lune     = "lune-org/lune@0.11.1"
+```
+
+**实测补充（换机器/上 CI 时会再碰到的三件事）**
+
+1. **首次必须先 `trust`**：`rokit add <tool>` 会报 `has not been marked as trusted`，即使写成全限定名也一样。正确顺序是
+   `rokit trust <owner/repo>` → `rokit add <owner/repo> [alias]`。（`rokit add` 一次只收一个工具。）
+2. **直连 GitHub release 下载会被 reset**（`GitHub error: reqwest error: error decoding response body`；`raw.githubusercontent.com` 连接被重置，而 `api.github.com` 通）。
+   带代理重跑即可：`HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=... rokit install --no-trust-check`。**CI 若同受限，需在 GitLab CI 配代理变量**（Step 8）。
+3. **PATH 遮蔽**：本机 `~/.aftman/bin` 排在 `~/.rokit/bin` **之前**，而 aftman 的 `rojo/stylua/luau-lsp/wally` 四个 shim 因全局 `aftman.toml` 中对应行被注释而全部报错。
+   因此裸命令 `rojo` / `stylua` / `luau-lsp` 目前命中的是**坏 shim**（`lune` / `selene` 命中 rokit，正常）。
+   修法（二选一，均需人工）：① 从 Windows 用户 PATH 移除 `C:\Users\31401\.aftman\bin`（推荐，aftman 已被 rokit 取代）；
+   ② 删除 `~/.aftman/bin/` 下四个坏 shim（真二进制在 `~/.aftman/tool-storage`，74 MB，不受影响）。
+
+判据：`rokit.toml` 在仓库根且已被 git 跟踪；`rokit install` 幂等。**AC-D0.1 尚未达成**（Step 2–12 未做）。
 
 **Step 2 · `default.project.json`（Rojo 映射）**
 
