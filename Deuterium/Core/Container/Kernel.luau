@@ -68,7 +68,9 @@ function Kernel.Construct(): boolean
 	ServiceContainer.Freeze()
 
 	_state = "Constructed"
-	Debug.print(("[Dr.Kernel] Constructed: %d providers, order: %s"):format(#_order, table.concat(_order, ", ")))
+	Debug.print(
+		("[Dr.Kernel] Constructed: %d providers, order: %s"):format(#_order, table.concat(_order, ", "))
+	)
 	return true
 end
 

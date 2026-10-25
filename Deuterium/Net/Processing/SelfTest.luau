@@ -68,7 +68,8 @@ function SelfTest.RunAll(): boolean
 		{
 			name = "truncated buffer erros not crashes",
 			fn = function()
-				local buf = Serializer.Pack(POS_SCHEMA, { id = 1, pos = Vector3.zero, zone = "a", active = false })
+				local buf =
+					Serializer.Pack(POS_SCHEMA, { id = 1, pos = Vector3.zero, zone = "a", active = false })
 				local short = buffer.create(4)
 				buffer.copy(short, 0, buf, 0, 4)
 				local ok = pcall(Serializer.Unpack, POS_SCHEMA, short)
@@ -86,7 +87,8 @@ function SelfTest.RunAll(): boolean
 		{
 			name = "packet envelope bounds-checked",
 			fn = function()
-				local inner = Serializer.Pack(POS_SCHEMA, { id = 3, pos = Vector3.zero, zone = "z", active = true })
+				local inner =
+					Serializer.Pack(POS_SCHEMA, { id = 3, pos = Vector3.zero, zone = "z", active = true })
 				local env = Packet.Encode(42, inner)
 				local decoded = Packet.Decode(env)
 				expect(decoded.opId == 42, "opId")
@@ -106,7 +108,8 @@ function SelfTest.RunAll(): boolean
 				local restored = Compressor.Decode(packed)
 				expect(buffer.len(restored) == 200, "length preserved")
 				expect(
-					buffer.readu8(restored, 0) == 9 and buffer.readu8(source, 120) == buffer.readu8(restored, 120),
+					buffer.readu8(restored, 0) == 9
+						and buffer.readu8(source, 120) == buffer.readu8(restored, 120),
 					"byte-exact"
 				)
 			end,

@@ -32,7 +32,11 @@ end
 
 -- Returns (hit: boolean, result: RaycastResult?). Callers that only need the bool
 -- never pay for the result table unpack.
-function PhysicsProxy.Raycast(origin: Vector3, direction: Vector3, params: RaycastParams?): (boolean, RaycastResult?)
+function PhysicsProxy.Raycast(
+	origin: Vector3,
+	direction: Vector3,
+	params: RaycastParams?
+): (boolean, RaycastResult?)
 	local result = Workspace:Raycast(origin, direction, params)
 	return result ~= nil, result
 end

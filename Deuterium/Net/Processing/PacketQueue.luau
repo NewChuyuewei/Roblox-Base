@@ -19,7 +19,10 @@ local _queues: { [string]: { list: { buffer }, dropped: number } } = {}
 
 function PacketQueue.Open(channel: string, maxPayloadBytes: number): Queue
 	assert(type(channel) == "string" and #channel > 0, "[Dr.PacketQueue] channel name required")
-	assert(type(maxPayloadBytes) == "number" and maxPayloadBytes > 0, "[Dr.PacketQueue] maxPayloadBytes must be > 0")
+	assert(
+		type(maxPayloadBytes) == "number" and maxPayloadBytes > 0,
+		"[Dr.PacketQueue] maxPayloadBytes must be > 0"
+	)
 	assert(_queues[channel] == nil, `[Dr.PacketQueue] duplicate queue: {channel}`)
 
 	local slot = { list = {} :: { buffer }, dropped = 0 }

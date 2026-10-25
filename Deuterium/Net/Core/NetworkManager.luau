@@ -39,7 +39,10 @@ function NetworkManager.DeclareChannels(names: { string }): ()
 	assertNotDeclared()
 	assert(RunContext.IsServer(), "[Dr.NetworkManager] DeclareChannels is server-only")
 	for _, name in names do
-		assert(type(name) == "string" and #name > 0, "[Dr.NetworkManager] channel name must be non-empty string")
+		assert(
+			type(name) == "string" and #name > 0,
+			"[Dr.NetworkManager] channel name must be non-empty string"
+		)
 		assert(_channels[name] == nil, `[Dr.NetworkManager] duplicate channel: {name}`)
 		local remote = Instance.new("RemoteEvent")
 		remote.Name = name

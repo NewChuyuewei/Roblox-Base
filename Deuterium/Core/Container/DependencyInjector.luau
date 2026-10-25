@@ -25,7 +25,10 @@ local function topologicalOrder(providers: { Types.Provider }): ResolveResult
 		if deps ~= nil then
 			for _, dep in deps do
 				if not names[dep] then
-					return { order = nil, error = `[Dr.DependencyInjector] {p.Name} depends on missing provider {dep}` }
+					return {
+						order = nil,
+						error = `[Dr.DependencyInjector] {p.Name} depends on missing provider {dep}`,
+					}
 				end
 			end
 		end

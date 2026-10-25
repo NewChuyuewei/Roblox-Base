@@ -48,7 +48,7 @@
 | 2026-10-25 | **Step 4** | ✅ | `.luaurc`；修正开关为 `--base-luaurc`（非 `--settings`） |
 | 2026-10-25 | **Step 5** | ◐ | `stylua.toml` 逐键实测通过；`.gitattributes` 修行尾；**selene 已移除**（0.32.0 在 Luau 插值字符串上 panic 且无新版） |
 | 2026-10-25 | **Step 5b** | ✅ | `scripts/p0-check.sh` 基线 26 / 48 / 0，棘轮生效 |
-| 2026-10-25 | **Step 6** | ◐ | stylua 全仓 **0 需格式化**；p0 OK；luau-lsp 阻塞于 defs（Step 8） |
+| 2026-10-25 | **Step 6** | ◐ | 22 个文件已格式化，`stylua --check` exit 0；p0 OK；luau-lsp 阻塞于 defs（Step 8） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -199,10 +199,28 @@ syntax = "Luau"
 
 | 门禁 | 结果 |
 | --- | --- |
-| `stylua --check Deuterium TritiumSQL` | ✅ **0 个文件需要格式化**（原计划预判的「全仓格式化大提交」**不必要**——代码本来就是 tabs/双引号风格） |
-| `scripts/p0-check.sh` | ✅ OK（棘轮基线已立） |
+| `stylua --check Deuterium TritiumSQL` | ✅ exit **0**（第一次跑出 **22 个文件**需要格式化，已用一次 `style:` 提交格式化完毕） |
+| `scripts/p0-check.sh` | ✅ OK（棘轮基线 26/48/0，格式化后未变） |
 | `luau-lsp analyze` | ⏭ 阻塞于 `globalTypes.d.luau`（Step 8） |
 | ~~`selene`~~ | ❌ 已移除，见 Step 5 |
+
+**实测补充：原计划预判对了。** 代码本来确实是 tabs + 双引号，但仍有 22 个文件需要格式化——差异是**列宽 110 的换行**，例如 `DependencyInjector.luau`：
+
+```lua
+-- before
+return { order = nil, error = `[Dr.DependencyInjector] {p.Name} depends on missing provider {dep}` }
+-- after
+return {
+	order = nil,
+	error = `[Dr.DependencyInjector] {p.Name} depends on missing provider {dep}`,
+}
+```
+
+### ⚠ 方法论陷阱（很重要，差点让门禁假绿）
+
+我第一次读到的结果是「0 个文件需要格式化」，**那是假的**：那一次 stylua 因为我写了个非法配置键（`line_endings = "Auto"`，2.6.0 只认 `Unix`/`Windows`）而 **exit=2 且无任何输出**，而我的判定命令是 `grep -c '^Diff in'` ——空输入自然得 0，于是“工具跑挂了”看起来像“全部合格”。
+
+**规则：门禁的判定必须同时断言工具的退出码，不能只数输出行。** 这一条对 `scripts/p0-check.sh`（已用 `set -e` + 显式 exit 1）、Step 8 的 CI（`set -e` 逐条脚本）同样适用。已在 STEPS 的 DoD 里加一条：**工具返回非 0/非预期退出码 = 失败，即使没有输出**。
 
 判据：以 **Step 8 的 CI 四阶段全绿**为最终判据。
 
@@ -464,11 +482,13 @@ SchemaStore（内存）→ TriSQL.Compile("CREATE TABLE t (id INT PRIMARY KEY, n
 3. 实现只依赖允许的层；新增 require 前自问「这一层允许吗」。
 4. 非平凡逻辑配单测（分支 / 循环 / 解析 / 金钱或安全 / 请求计数）。
 5. 已知限制写 `shortcut: <限制>, <何时升级>`（如 Step 47）。
-6. 本地跑齐门禁：
+6. 本地跑齐门禁，**并检查退出码**（工具非 0 退出 = 失败，即使没有输出）：
 
 ```bash
-stylua --check Deuterium TritiumSQL && selene Deuterium TritiumSQL \
-  && bash scripts/p0-check.sh && lune run tests/run.luau
+stylua --config-path stylua.toml --check Deuterium TritiumSQL \
+  && bash scripts/p0-check.sh \
+  && luau-lsp analyze --sourcemap=sourcemap.json --base-luaurc=.luaurc Deuterium \
+  && lune run tests/run.luau
 ```
 
 7. commit（Conventional Commits + `(step X.Y)`）→ 推分支 → CI 绿 → 更新本文件「进度登记」→ 开下一个 Step。

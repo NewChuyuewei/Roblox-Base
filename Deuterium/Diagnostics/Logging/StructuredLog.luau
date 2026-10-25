@@ -89,7 +89,13 @@ function StructuredLog.NormalizeLevel(value: any): Level?
 	return nil
 end
 
-function StructuredLog.New(level: Level, tag: string, msg: string, data: { [string]: any }?, ts: number?): Record
+function StructuredLog.New(
+	level: Level,
+	tag: string,
+	msg: string,
+	data: { [string]: any }?,
+	ts: number?
+): Record
 	assert(LEVEL_RANK[level] ~= nil, `[Dr.StructuredLog] invalid level: {tostring(level)}`)
 	assert(type(tag) == "string" and #tag > 0, "[Dr.StructuredLog] tag required")
 	assert(type(msg) == "string", "[Dr.StructuredLog] msg must be a string")

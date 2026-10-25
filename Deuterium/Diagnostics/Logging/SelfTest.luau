@@ -94,8 +94,12 @@ function SelfTest.RunAll(): boolean
 		{
 			name = "Format shape",
 			fn = function()
-				expect(StructuredLog.Format(StructuredLog.New("info", "Dr.K", "hi")) == "[info][Dr.K] hi", "plain line")
-				local withData = StructuredLog.Format(StructuredLog.New("warn", "Dr.K", "hi", { n = 3, z = "x" }))
+				expect(
+					StructuredLog.Format(StructuredLog.New("info", "Dr.K", "hi")) == "[info][Dr.K] hi",
+					"plain line"
+				)
+				local withData =
+					StructuredLog.Format(StructuredLog.New("warn", "Dr.K", "hi", { n = 3, z = "x" }))
 				expect(withData == "[warn][Dr.K] hi {n=3 z=x}", `unexpected: {withData}`)
 			end,
 		},

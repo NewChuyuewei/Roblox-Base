@@ -22,10 +22,16 @@ local function validate(provider: any): Types.Provider
 	)
 	assert(type(provider.Init) == "function", `[Dr.ServiceRegistry] {provider.Name}: Init must be a function`)
 	if provider.Start ~= nil then
-		assert(type(provider.Start) == "function", `[Dr.ServiceRegistry] {provider.Name}: Start must be function?`)
+		assert(
+			type(provider.Start) == "function",
+			`[Dr.ServiceRegistry] {provider.Name}: Start must be function?`
+		)
 	end
 	if provider.Stop ~= nil then
-		assert(type(provider.Stop) == "function", `[Dr.ServiceRegistry] {provider.Name}: Stop must be function?`)
+		assert(
+			type(provider.Stop) == "function",
+			`[Dr.ServiceRegistry] {provider.Name}: Stop must be function?`
+		)
 	end
 	if provider.Dependencies ~= nil then
 		assert(
@@ -33,7 +39,10 @@ local function validate(provider: any): Types.Provider
 			`[Dr.ServiceRegistry] {provider.Name}: Dependencies must be a list`
 		)
 		for index, dep in provider.Dependencies do
-			assert(type(index) == "number", `[Dr.ServiceRegistry] {provider.Name}: Dependencies must be an array`)
+			assert(
+				type(index) == "number",
+				`[Dr.ServiceRegistry] {provider.Name}: Dependencies must be an array`
+			)
 			assert(
 				type(dep) == "string",
 				`[Dr.ServiceRegistry] {provider.Name}: Dependencies[{index}] must be a string`

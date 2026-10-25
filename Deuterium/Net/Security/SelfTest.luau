@@ -114,7 +114,8 @@ function SelfTest.RunAll(): boolean
 			name = "sha256: NIST known-answer vectors",
 			fn = function()
 				expect(
-					Sha256.ToHex(Sha256.Hash("")) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+					Sha256.ToHex(Sha256.Hash(""))
+						== "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 					"empty-string vector"
 				)
 				expect(
@@ -150,7 +151,10 @@ function SelfTest.RunAll(): boolean
 
 				local sig = RequestSigner.Sign(secret, nonce, ts, payload)
 				expect(#sig == 32, "signature is 32 bytes")
-				expect(RequestSigner.Verify("W23.sign", secret, nonce, ts, payload, sig), "authentic frame accepted")
+				expect(
+					RequestSigner.Verify("W23.sign", secret, nonce, ts, payload, sig),
+					"authentic frame accepted"
+				)
 
 				-- Tampered payload, same signature → reject.
 				local tampered = buffer.create(8)
@@ -168,12 +172,18 @@ function SelfTest.RunAll(): boolean
 				)
 
 				-- Replay of the already-consumed frame → reject.
-				expect(not RequestSigner.Verify("W23.sign", secret, nonce, ts, payload, sig), "replayed frame rejected")
+				expect(
+					not RequestSigner.Verify("W23.sign", secret, nonce, ts, payload, sig),
+					"replayed frame rejected"
+				)
 
 				-- Fresh frame with a new nonce → accepted.
 				local nonce2 = "nonceXYZ9A"
 				local sig2 = RequestSigner.Sign(secret, nonce2, ts, payload)
-				expect(RequestSigner.Verify("W23.sign", secret, nonce2, ts, payload, sig2), "fresh frame accepted")
+				expect(
+					RequestSigner.Verify("W23.sign", secret, nonce2, ts, payload, sig2),
+					"fresh frame accepted"
+				)
 			end,
 		},
 		{

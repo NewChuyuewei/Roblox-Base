@@ -20,7 +20,11 @@ function Packet.Encode(opId: number, payload: buffer): buffer
 	assert(type(opId) == "number" and opId >= 0 and opId <= 0xFFFF, "[Dr.Packet] opId must be u16")
 	local payloadLen = buffer.len(payload)
 	if payloadLen > MAX_PAYLOAD_BYTES then
-		ErrorHandler.Raise("DR.NET.PACKET.OVERSIZE", `payload {payloadLen}B > {MAX_PAYLOAD_BYTES}B`, "Dr.Packet")
+		ErrorHandler.Raise(
+			"DR.NET.PACKET.OVERSIZE",
+			`payload {payloadLen}B > {MAX_PAYLOAD_BYTES}B`,
+			"Dr.Packet"
+		)
 	end
 	local out = buffer.create(HEADER_SIZE + payloadLen)
 	buffer.writeu16(out, 0, opId)
@@ -38,7 +42,11 @@ function Packet.Decode(buf: buffer): Envelope
 	local opId = buffer.readu16(buf, 0)
 	local payloadLen = buffer.readu32(buf, 2)
 	if payloadLen > MAX_PAYLOAD_BYTES then
-		ErrorHandler.Raise("DR.NET.PACKET.OVERSIZE", `declared {payloadLen}B > {MAX_PAYLOAD_BYTES}B`, "Dr.Packet")
+		ErrorHandler.Raise(
+			"DR.NET.PACKET.OVERSIZE",
+			`declared {payloadLen}B > {MAX_PAYLOAD_BYTES}B`,
+			"Dr.Packet"
+		)
 	end
 	if len - HEADER_SIZE < payloadLen then
 		ErrorHandler.Raise(

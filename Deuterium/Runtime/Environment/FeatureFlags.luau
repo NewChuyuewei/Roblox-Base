@@ -23,7 +23,10 @@ local FeatureFlags = {}
 local function validateEntry(def: any, index: number): RuntimeTypes.FeatureFlagDef
 	assert(type(def) == "table", `[Dr.FeatureFlags] config entry #{index} is not a table`)
 	assert(type(def.name) == "string", `[Dr.FeatureFlags] config entry #{index}.name must be a string`)
-	assert(type(def.default) == "boolean", `[Dr.FeatureFlags] config entry #{def.name}.default must be a boolean`)
+	assert(
+		type(def.default) == "boolean",
+		`[Dr.FeatureFlags] config entry #{def.name}.default must be a boolean`
+	)
 	assert(
 		def.studioOverride == nil or type(def.studioOverride) == "boolean",
 		`[Dr.FeatureFlags] config entry #{def.name}.studioOverride must be boolean?`

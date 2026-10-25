@@ -31,7 +31,13 @@ local function ringFor(key: string, size: number): NonceRing
 end
 
 -- Verify a frame stamped (key, nonce, ts). Rejects: stale ts, future ts, reused nonce.
-function ReplayGuard.Verify(key: string, nonce: string, ts: number, windowSecs: number?, ringSize: number?): boolean
+function ReplayGuard.Verify(
+	key: string,
+	nonce: string,
+	ts: number,
+	windowSecs: number?,
+	ringSize: number?
+): boolean
 	assert(type(key) == "string" and #key > 0, "[Dr.ReplayGuard] key required")
 	assert(type(nonce) == "string" and #nonce >= 8, "[Dr.ReplayGuard] nonce must be >= 8 chars")
 	assert(type(ts) == "number", "[Dr.ReplayGuard] ts must be a number")

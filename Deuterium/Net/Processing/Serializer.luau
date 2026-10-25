@@ -6,7 +6,18 @@
 
 local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
 
-export type FieldType = "u8" | "u16" | "u32" | "i8" | "i16" | "i32" | "f32" | "f64" | "bool" | "string" | "vec3"
+export type FieldType =
+	"u8"
+	| "u16"
+	| "u32"
+	| "i8"
+	| "i16"
+	| "i32"
+	| "f32"
+	| "f64"
+	| "bool"
+	| "string"
+	| "vec3"
 
 export type Field = {
 	name: string,
@@ -40,7 +51,8 @@ local function fieldByteSize(field: Field, value: any): number
 	elseif field.type == "vec3" then
 		return 12 -- 3 × f32
 	end
-	return FIXED_SIZE[field.type :: FieldType] or error(`[Dr.Serializer] no size for field type: {field.type}`)
+	return FIXED_SIZE[field.type :: FieldType]
+		or error(`[Dr.Serializer] no size for field type: {field.type}`)
 end
 
 local function validateValue(field: Field, value: any)
@@ -52,7 +64,11 @@ local function validateValue(field: Field, value: any)
 			ErrorHandler.Raise("DR.NET.SER.TYPE", `{field.name} expected string`, "Dr.Serializer")
 		end
 		if field.maxLen ~= nil and #value > (field.maxLen :: number) then
-			ErrorHandler.Raise("DR.NET.SER.LEN", `{field.name} exceeds maxLen {field.maxLen}`, "Dr.Serializer")
+			ErrorHandler.Raise(
+				"DR.NET.SER.LEN",
+				`{field.name} exceeds maxLen {field.maxLen}`,
+				"Dr.Serializer"
+			)
 		end
 	elseif field.type == "vec3" then
 		if typeof(value) ~= "Vector3" then
@@ -64,7 +80,11 @@ local function validateValue(field: Field, value: any)
 		end
 	else
 		if type(value) ~= "number" then
-			ErrorHandler.Raise("DR.NET.SER.TYPE", `{field.name} expected number, got {type(value)}`, "Dr.Serializer")
+			ErrorHandler.Raise(
+				"DR.NET.SER.TYPE",
+				`{field.name} expected number, got {type(value)}`,
+				"Dr.Serializer"
+			)
 		end
 	end
 end
@@ -113,7 +133,11 @@ function Serializer.Pack(schema: Schema, values: { [string]: any }): buffer
 			elseif field.type == "f64" then
 				buffer.writef64(out, cursor, value)
 			else
-				ErrorHandler.Raise("DR.NET.SER.UNKNOWNTYPE", `unknown field type: {field.type}`, "Dr.Serializer")
+				ErrorHandler.Raise(
+					"DR.NET.SER.UNKNOWNTYPE",
+					`unknown field type: {field.type}`,
+					"Dr.Serializer"
+				)
 			end
 			cursor += size
 		end
@@ -127,16 +151,28 @@ function Serializer.Unpack(schema: Schema, buf: buffer): { [string]: any }
 	local len = buffer.len(buf)
 	for _, field in schema.fields do
 		if cursor >= len then
-			ErrorHandler.Raise("DR.NET.SER.SHORT", `{schema.name}: ran out at field {field.name}`, "Dr.Serializer")
+			ErrorHandler.Raise(
+				"DR.NET.SER.SHORT",
+				`{schema.name}: ran out at field {field.name}`,
+				"Dr.Serializer"
+			)
 		end
 		if field.type == "string" then
 			local byteLen = buffer.readu32(buf, cursor)
 			cursor += 4
 			if field.maxLen ~= nil and byteLen > (field.maxLen :: number) then
-				ErrorHandler.Raise("DR.NET.SER.FLOODING", `{field.name}: declared {byteLen}B > maxLen`, "Dr.Serializer")
+				ErrorHandler.Raise(
+					"DR.NET.SER.FLOODING",
+					`{field.name}: declared {byteLen}B > maxLen`,
+					"Dr.Serializer"
+				)
 			end
 			if cursor + byteLen > len then
-				ErrorHandler.Raise("DR.NET.SER.TRUNC", `{field.name}: string overruns buffer`, "Dr.Serializer")
+				ErrorHandler.Raise(
+					"DR.NET.SER.TRUNC",
+					`{field.name}: string overruns buffer`,
+					"Dr.Serializer"
+				)
 			end
 			out[field.name] = buffer.readstring(buf, cursor, byteLen)
 			cursor += byteLen
@@ -156,10 +192,18 @@ function Serializer.Unpack(schema: Schema, buf: buffer): { [string]: any }
 		else
 			local size = FIXED_SIZE[field.type :: FieldType]
 			if size == nil then
-				ErrorHandler.Raise("DR.NET.SER.UNKNOWNTYPE", `unknown field type: {field.type}`, "Dr.Serializer")
+				ErrorHandler.Raise(
+					"DR.NET.SER.UNKNOWNTYPE",
+					`unknown field type: {field.type}`,
+					"Dr.Serializer"
+				)
 			end
 			if cursor + size > len then -- bounds check BEFORE read
-				ErrorHandler.Raise("DR.NET.SER.TRUNC", `{field.name}: numeric overruns buffer`, "Dr.Serializer")
+				ErrorHandler.Raise(
+					"DR.NET.SER.TRUNC",
+					`{field.name}: numeric overruns buffer`,
+					"Dr.Serializer"
+				)
 			end
 			if field.type == "u8" then
 				out[field.name] = buffer.readu8(buf, cursor)
@@ -183,7 +227,11 @@ function Serializer.Unpack(schema: Schema, buf: buffer): { [string]: any }
 	end
 	-- Trailing garbage is a contract violation, not a shrug.
 	if cursor ~= len then
-		ErrorHandler.Raise("DR.NET.SER.TRAILING", `{schema.name}: {len - cursor}B trailing garbage`, "Dr.Serializer")
+		ErrorHandler.Raise(
+			"DR.NET.SER.TRAILING",
+			`{schema.name}: {len - cursor}B trailing garbage`,
+			"Dr.Serializer"
+		)
 	end
 	return out
 end

@@ -45,7 +45,10 @@ function SelfTest.RunAll(): boolean
 			name = "RunContext side consistent",
 			fn = function()
 				expect(RunContext.IsServer() ~= RunContext.IsClient(), "server/client xor")
-				expect(RunContext.GetSide() == if RunContext.IsServer() then "Server" else "Client", "side value")
+				expect(
+					RunContext.GetSide() == if RunContext.IsServer() then "Server" else "Client",
+					"side value"
+				)
 			end,
 		},
 		{
@@ -61,7 +64,10 @@ function SelfTest.RunAll(): boolean
 			fn = function()
 				expect(#EngineVersion.Get() > 0, "version string")
 				expect(type(EngineVersion.GetInfo().studio) == "boolean", "engine info shape")
-				expect(EngineVersion.HasEngineFeature("__DeuteriumDoesNotExist__") == false, "bogus feature is false")
+				expect(
+					EngineVersion.HasEngineFeature("__DeuteriumDoesNotExist__") == false,
+					"bogus feature is false"
+				)
 			end,
 		},
 		{

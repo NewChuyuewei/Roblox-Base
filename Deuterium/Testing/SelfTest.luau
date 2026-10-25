@@ -76,7 +76,10 @@ function SelfTest.RunAll(): boolean
 	if not Configuration.IsLoaded() then
 		Configuration.Load()
 	end
-	Assert.IsTrue(table.find(Configuration.SectionNames(), "FeatureFlags") ~= nil, "FeatureFlags section visible")
+	Assert.IsTrue(
+		table.find(Configuration.SectionNames(), "FeatureFlags") ~= nil,
+		"FeatureFlags section visible"
+	)
 	if not FeatureFlags.IsLocked() then
 		FeatureFlags.LoadFromConfig()
 	end

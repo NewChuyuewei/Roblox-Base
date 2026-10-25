@@ -34,7 +34,11 @@ function TestSuite.Define(suiteName: string, builder: (t: any) -> ()): Suite
 				ErrorHandler.Raise("DR.TEST.CASE.NAME", "case name required", `Dr.TestSuite:{suiteName}`)
 			end
 			if type(fn) ~= "function" then
-				ErrorHandler.Raise("DR.TEST.CASE.FN", "case fn must be a function", `Dr.TestSuite:{suiteName}`)
+				ErrorHandler.Raise(
+					"DR.TEST.CASE.FN",
+					"case fn must be a function",
+					`Dr.TestSuite:{suiteName}`
+				)
 			end
 			table.insert(cases, table.freeze({ name = caseName, fn = fn }))
 		end,

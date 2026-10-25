@@ -94,7 +94,10 @@ function SelfTest.RunAll(): boolean
 					PhysicsProxy.WithinDistance(Vector3.zero, Vector3.new(3, 0, 4), 4.9) == false,
 					"3-4-5 outside 4.9"
 				)
-				expect(PhysicsProxy.DistanceSquared(Vector3.zero, Vector3.new(3, 0, 4)) == 25, "squared distance exact")
+				expect(
+					PhysicsProxy.DistanceSquared(Vector3.zero, Vector3.new(3, 0, 4)) == 25,
+					"squared distance exact"
+				)
 			end,
 		},
 		{

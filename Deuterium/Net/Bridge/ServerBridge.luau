@@ -47,7 +47,10 @@ end
 
 -- Used by Services to compose their outgoing surface without ever naming RemoteEvent.
 function ServerBridge.OpenFor(provider: Types.Provider, name: string): Handle
-	assert(type(provider) == "table" and type(provider.Name) == "string", "[Dr.ServerBridge] OpenFor expects provider")
+	assert(
+		type(provider) == "table" and type(provider.Name) == "string",
+		"[Dr.ServerBridge] OpenFor expects provider"
+	)
 	return ServerBridge.Open(`{provider.Name}::{name}`)
 end
 
