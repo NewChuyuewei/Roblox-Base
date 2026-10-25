@@ -36,7 +36,9 @@ lint:
   stage: lint
   script:
     # 格式化：认证范围内只读（stylua 会改写源码，而源码是受控数据）
-    - stylua --config-path stylua.toml --check Deuterium TritiumSQL scripts
+    # 第三方树（Scribe / QuickZone）不进格式化门禁：它们不是我们的代码，
+    # 改它们的排版只会让上游 diff 无法比对（审计与更新都靠原始 diff）。
+    - stylua --config-path stylua.toml --check src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL scripts
     # P0 规约棘轮：只允许下降
     - bash scripts/p0-check.sh
     # 门禁 10（I16）：认证范围不得触碰引擎/网络/非认证层，且依赖必须在范围内
@@ -51,7 +53,9 @@ types:
     # types/globalTypes.None.d.luau 已随仓库固定在版本控制里（来源见 MEMORY.md），
     # 所以这一步**不需要联网**，结果可复现。
     # scripts/ 不在分析范围内：它们是 Lune 宿主脚本，require("@lune/*") 无法被解析。
-    - luau-lsp analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc Deuterium TritiumSQL
+    # 同样只分析我们的代码。第三方树的类型问题（Scribe 自带说明：需要新版类型求解器）
+    # 不是本项目的可关闭项，混在一起会让门禁失去信号。
+    - luau-lsp analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL
 
 build:
   stage: build

@@ -5,11 +5,15 @@
 
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-      "Deuterium": { "$path": "Deuterium" },
-      "TritiumSQL": { "$path": "TritiumSQL" },
-      "Configs": { "$path": "Configs" },
 
-      "Debug": { "$path": "src/ReplicatedStorage/Debug.luau" }
+      "Deuterium": { "$path": "src/ReplicatedStorage/Deuterium" },
+      "TritiumSQL": { "$path": "src/ReplicatedStorage/TritiumSQL" },
+      "Configs": { "$path": "src/ReplicatedStorage/Configs" },
+
+      "Debug": { "$path": "src/ReplicatedStorage/Debug.luau" },
+
+      "Scribe": { "$path": "src/ReplicatedStorage/Scribe" },
+      "QuickZone": { "$path": "src/ReplicatedStorage/QuickZone" }
     },
 
     "ServerScriptService": {

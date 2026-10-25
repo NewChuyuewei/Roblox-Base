@@ -332,7 +332,7 @@ probe("setfenv 后 __index=_G 仍能取到标准库", function()
 end)
 
 probe("headless 加载 Logging 四模块（拓扑序）", function()
-	local dir = "Deuterium/Diagnostics/Logging/"
+	local dir = "src/ReplicatedStorage/Deuterium/Diagnostics/Logging/"
 	local StructuredLog = loadModule(dir .. "StructuredLog.luau", {})
 	local LogSink = loadModule(dir .. "LogSink.luau", { StructuredLog = StructuredLog })
 	local Logger = loadModule(dir .. "Logger.luau", { StructuredLog = StructuredLog, LogSink = LogSink })
@@ -341,7 +341,7 @@ probe("headless 加载 Logging 四模块（拓扑序）", function()
 end)
 
 probe("headless 跑 Logging 的 SelfTest（真用例，非重写）", function()
-	local dir = "Deuterium/Diagnostics/Logging/"
+	local dir = "src/ReplicatedStorage/Deuterium/Diagnostics/Logging/"
 	local StructuredLog = loadModule(dir .. "StructuredLog.luau", {})
 	local LogSink = loadModule(dir .. "LogSink.luau", { StructuredLog = StructuredLog })
 	local Logger = loadModule(dir .. "Logger.luau", { StructuredLog = StructuredLog, LogSink = LogSink })

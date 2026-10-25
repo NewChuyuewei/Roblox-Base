@@ -14,23 +14,23 @@ local process = require("@lune/process")
 local SUITES: { { name: string, dir: string, order: { string } } } = {
 	{
 		name = "Dr.Diagnostics.Logging",
-		dir = "Deuterium/Diagnostics/Logging",
+		dir = "src/ReplicatedStorage/Deuterium/Diagnostics/Logging",
 		order = { "StructuredLog", "LogSink", "Logger", "Debug", "SelfTest" },
 	},
 }
 
 -- 需要 game、只能在 Studio 跑的 SelfTest（此处只登记，不跑）
 local ENGINE_BOUND = {
-	"Deuterium/Core/Container/SelfTest.luau",
-	"Deuterium/Core/Lifecycle/SelfTest.luau",
-	"Deuterium/Core/Reflection/SelfTest.luau",
-	"Deuterium/Net/Core/SelfTest.luau",
-	"Deuterium/Net/Processing/SelfTest.luau",
-	"Deuterium/Net/Security/SelfTest.luau",
-	"Deuterium/Runtime/Environment/SelfTest.luau",
-	"Deuterium/Runtime/Interop/SelfTest.luau",
-	"Deuterium/Runtime/Platform/SelfTest.luau",
-	"Deuterium/Testing/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Core/Container/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Core/Lifecycle/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Core/Reflection/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Net/Core/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Net/Processing/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Net/Security/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Runtime/Environment/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Runtime/Interop/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Runtime/Platform/SelfTest.luau",
+	"src/ReplicatedStorage/Deuterium/Testing/SelfTest.luau",
 }
 
 print(("="):rep(72))

@@ -73,7 +73,9 @@
 | D5 | 发布形态 | Wally 包 / submodule | Wally：`vospek/deuterium` + `vospek/tritiumsql`，独立版本号 | DECIDED | D7.6 / T10 |
 | D6 | Scribe 审计 | 审计后保留 / 换自研 | **实测结论：本仓库根本没有 Scribe**（无 `Libraries/`，全仓 grep 命中 0）→ 无可审计，无需五步流程。规格 §3 的「已内置」声明与仓库事实不符，已列入规格修订清单 | **CLOSED** | — |
 | D7 | QuickZone 是否引入 | 引入 / 不引入 | 引入，推迟到世界层动工前 | DECIDED | D6.6 |
-| D8 | 目录落地 | 现树 + Rojo 映射 / 迁到 `src/ReplicatedStorage/` | **现树 + Rojo 映射**（现有 require 字符串已与现树一致） | DECIDED | Step 2 |
+| D8 | 目录落地 | 现树 + Rojo 映射 / 迁到 `src/ReplicatedStorage/` | **已由用户改为 `src/ReplicatedStorage/`**（与规格 §4 一致）。代价：`scope.txt`（CC1）与全部工具路径已随之重写；收益：与规格一致、`Scribe`/`QuickZone` 有自然位置 | **SUPERSEDED** | — |
+| D11 | Scribe 与 QuickZone 是否可用 | 先审计后使用 / 直接用 | ⛔ **未审计则不得用**：两者均无 LICENSE、无版本 hash、未剥离、无 Overrides（缺口清单见 `MEMORY.md` §1.1）。另：**Scribe 实际是玩家数据/复制库（自带 ProfileStore），不是规格写的日志库** | **OPEN（阻塞）** | 任何用到它们的 Wave |
+| D2-bis | PlayerState 是否还需要 | 仍需要 / 被 Scribe 顶替 | 重开 D2：Scribe 自带 ProfileStore 且是玩家数据载体，PlayerState 的存在理由需要重新论证 | **OPEN** | D4.1 |
 | D9 | 集成层事件机制 | 直接回调 / `Dr.Signal` 广播 | 待 `Dr.Signal`（D2.0）落地后定；默认先回调（依赖更少、更快），Signal 作为可选广播 | **OPEN** | Step 54/57 |
 | D10 | 合规目标定性 | 适航级全合规 / 航空级可靠性工程 | **可审查的航空级可靠性工程，保留 DO-178C 目标结构与升级路径**（理由与四项裁剪：`docs/cert/HAZARD.md` §1）。升级为全合规是**加法**而非重写 | **DECIDED** | — |
 
@@ -129,6 +131,8 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | R19 | **假独立性**（拿同一会话的复审当独立验证） | 高 | §7.5 的偏差未被记录 | 永久偏差登记 + 独立会话留证；**不声称**组织独立性 | `CERT.md` §7.5 |
 | R20 | **工具鉴定被默认豁免**（“用工具不签定”） | 中 | 某工具有产出却被当作自动免鉴定 | `CERT.md` §4.4 逐条关闭 TQL 判定，无一件“默认” | `CERT.md` §4.4 |
 | R21 | **插桩器自身出错污染覆盖结论**（高估→假绿；低估→无谓返工） | 高 | 插桩器统计的可执行行与 `debug.info` 的函数范围不一致 | 插桩器必须有自己的测试；两来源交叉校验；R18 已部分关闭（路线已通，剩这个） | `docs/headless.md` §7 |
+| R22 | **两个第三方依赖未经审计就已在仓库里**（Scribe 38.7k 行 + QuickZone 6.5k 行，且无 LICENSE） | 极高 | 有代码 require 到它们；或发布时被质证供应链 | `MEMORY.md` §1.1 的五项缺口逐条关闭后才能用；门禁 10 已能拦住“认证核心 require 它们” | `MEMORY.md` §1.1 |
+| R23 | **迁移到 `src/` 后路径引用漂移**（工具、门禁、文档各自写路径） | 中 | 任一门禁找不到文件但仍然通过（如 p0 扫描目录不存在 → 计数为 0 → 假绿） | 扫描类工具必须**断言目录存在**而非静默跳过；本次已核对 p0 计数前后一致（26/47/0） | `scripts/p0-check.sh` |
 
 ## 7. 验收 ID 规范
 
@@ -147,6 +151,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v10** | **目录迁移到 `src/ReplicatedStorage/`（用户执行）+ 两个第三方依赖入库**：`scope.txt`（CC1）与全部工具/文档路径重写并逐门禁复验（build 135 ModuleScript · p0 26/47/0 与迁移前一致 · 门禁 10 自检 9/9 · headless PASS 1/SKIP 10 · analyze TypeError 0）。**新增两个阻塞决策**：D11（Scribe/QuickZone 未审计：无 LICENSE、无版本 hash、未剥离、无 Overrides）与 D2-bis（Scribe 实际是玩家数据/复制库，规格写成日志库 — 错了）。新增风险 R22（第三方供应链）与 R23（迁移后路径漂移，含“扫描目录不存在会静默假绿”） |
 | **v9** | **Step 8 完成**：`.gitlab-ci.yml` 四阶段（本地逐条 exit 0）· `tests/run.luau` + `scripts/lune-loader.luau`（headless 测试入口，如实报告 SKIP）· 经 MCP 找到 `luau-lsp.pages.dev` CDN → **vendor** `types/globalTypes.None.d.luau`（指纹入 `MEMORY.md`）→ **首次真跑类型检查：TypeError 0**，并抓到 **1 个真运行时 bug**（`Debug.luau` 双映射导致副本的相对 `require` 指向 `ReplicatedStorage.Logger`）+ 门禁 3 首次全绿 · 新建设 `src/ReplicatedStorage/Debug.luau` 垫片与 `Configs/Deuterium/` 树 |
 | **v8** | **Step 7 + Step 9 完成**：`docs/headless.md`（headless 能力基线）· `AGENTS.md` · `MEMORY.md`。**两条原假设被实测推翻**（`debug.sethook` 不存在 → C4 改**源码插桩**；`_G` 不是全局表 → env 必须显式拷标准库）；拓扑序 `setfenv` loader 跑通，**真 SelfTest 8/8**，并当场修掉 **3 个真 bug**（Logger 冒号调用漏 self）。Scribe 审计结论=**本仓库不存在**（D6 关闭），运行期外部依赖为零。新增风险 R21 |
 | **v7** | **C2 完成**：7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/` 索引。**目标关闭表按 Annex A 分表建立并带自洽校验**（明示的 8 表相加 = 53；A-5=9†、A-7=9† 则合计 = 71，与三源一致的 DAL A 总数吻合）。新增 `TYPES.md`（DO-178C §6.7/6.7.1 对动态语言的要求）→ 顺带暴露 `BIGINT` 的 2^53 降级未写明，已在 `TritiumSQL.md` 补上 |

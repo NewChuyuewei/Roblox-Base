@@ -16,14 +16,14 @@ BASELINE="$ROOT/scripts/p0-baseline.txt"
 
 # Directories that hold hot paths. Missing ones are skipped: later waves add them.
 SCAN_DIRS=(
-	"Deuterium/Core"
-	"Deuterium/Net"
-	"TritiumSQL/Tri/Request"
-	"TritiumSQL/Tri/Storage"
-	"TritiumSQL/Tri/Index"
-	"TritiumSQL/Tri/Txn"
-	"TritiumSQL/Tri/Wal"
-	"TritiumSQL/Tri/Query"
+	"src/ReplicatedStorage/Deuterium/Core"
+	"src/ReplicatedStorage/Deuterium/Net"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Request"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Storage"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Index"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Txn"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Wal"
+	"src/ReplicatedStorage/TritiumSQL/Tri/Query"
 )
 
 PATTERNS=(

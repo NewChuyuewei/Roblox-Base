@@ -9,11 +9,18 @@
 
 | 位置 | 内容 |
 | --- | --- |
-| `Deuterium/` | 框架（微内核/生命周期/网络/会话态/复制/安全） |
-| `TritiumSQL/` | 数据库引擎（页/B+树/事务/WAL/查询） |
+| `src/ReplicatedStorage/Deuterium/` | 框架（微内核/生命周期/网络/会话态/复制/安全） |
+| `src/ReplicatedStorage/TritiumSQL/` | 数据库引擎（页/B+树/事务/WAL/查询） |
+| `src/ReplicatedStorage/Configs/` | 项目配置（`Deuterium/init.luau` folder-module + `FeatureFlags.luau`） |
+| `src/ReplicatedStorage/Debug.luau` | 遗留 require 垫片（绝对路径）——见本文件 §5 |
+| `src/ReplicatedStorage/{Scribe,QuickZone}/` | **第三方依赖树**（⚠ 未审计，见 `MEMORY.md` §1.1）；不得被认证核心 require |
+| `src/ServerScriptService/` | 服务端专属（认证范围之外） |
 | `.plan/` | **计划层**：不变量 · 门禁 · 决策 · 风险 · 排期 · 执行步骤 |
 | `docs/cert/` | **DO-178C 认证线证据**（DAL C，≤12k 行子集） |
 | `docs/headless.md` | headless 能力基线（测试与覆盖怎么做） |
+| `scripts/` · `tests/` · `types/` | 门禁脚本（Lune/bash）· headless 测试入口 · vendor 的 Roblox 类型定义 |
+
+> **第三方树的三条规则**：① 不进 stylua/analyze 门禁（改它们排版后无法与上游 diff 比对）；② 认证核心不得 require 它们（I16，门禁 10 会拦）；③ 使用前必须走完 `MEMORY.md` §1.1 的审计缺口清单。
 
 **阅读顺序**：`.plan/README.md`（宪法）→ `.plan/STEPS.md`（当前该做哪一步）→ 需要动某一层时读对应的 `Deuterium.md` / `TritiumSQL.md` / `CERT.md`。
 
@@ -37,11 +44,16 @@ STYLUA="$HOME/.rokit/tool-storage/johnnymorganz/stylua/2.6.0/stylua.exe"
 LUNE="$HOME/.rokit/tool-storage/lune-org/lune/0.11.1/lune.exe"
 ROJO="$HOME/.rokit/tool-storage/rojo-rbx/rojo/7.7.1/rojo.exe"
 
-"$STYLUA" --config-path stylua.toml --check Deuterium TritiumSQL scripts ; echo "exit=$?"
+DS="src/ReplicatedStorage/Deuterium"; TS="src/ReplicatedStorage/TritiumSQL"
+"$STYLUA" --config-path stylua.toml --check $DS $TS scripts ; echo "exit=$?"
 bash scripts/p0-check.sh                                   # P0 棘轮（26 / 47 / 0）
 "$LUNE" run scripts/cert-scope-check.luau --quiet           # 门禁 10
 "$LUNE" run scripts/cert-scope-check.luau --selftest        # 门禁 10 自检
+"$LUNE" run tests/run.luau                                  # 门禁 2（headless，含 SKIP 计数）
 "$LUNE" run scripts/probe-headless.luau                     # headless 能力基线
+# 门禁 3 的类型部分（需 vendor 的 Roblox 定义；不联网）
+"$ROJO" sourcemap default.project.json -o sourcemap.json
+LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc $DS $TS
 "$ROJO" build -o /tmp/place.rbxlx                           # 结构冒烟
 ```
 

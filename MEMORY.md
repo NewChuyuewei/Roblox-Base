@@ -9,11 +9,27 @@
 
 | 依赖 | 规格声称的状态 | **审计实测结论** | 版本/来源 | 审计人 | 结论 |
 | --- | --- | --- | --- | --- | --- |
-| **Scribe** | 「已内置 `Libraries/Scribe`，⚠️ 待审计」 | **本仓库中根本不存在**：无 `Libraries/` 目录；全仓 `grep -rn Scribe` 命中 **0** 处（`.luau` 与配置均无） | 无 | 本会话（2026-10-25） | **规格的这条声明与仓库事实不符**。不存在则无可审计 → 无需五步流程。将来真正引入时必须按 §2 走完五步并回填本表 |
-| **PlayerState** | 「待引入，⛔ 未审计，不得用」 | 未引入（0 引用） | 无 | — | 保持 ⛔；引入前先关决策 D1（上游来源待定） |
-| **QuickZone** | 「计划内置 MIT，⛔ 未审计」 | 未引入（0 引用） | 无 | — | 保持 ⛔；推迟到世界层动工前 |
+| **Scribe** | 「已内置 `Libraries/Scribe`，**日志/观测**，⚠️ 待审计」 | **现已存在于 `src/ReplicatedStorage/Scribe/`（45 文件 / 38,717 行）**。实测事实：① 它**不是日志库**，而是**玩家数据/复制库**（自带 `Internal/Store/ProfileStore.luau`）—— 规格对它的角色描述**错了**；② 35 处 `game:GetService(`、14 处 `DataStoreService`；③ 无 `loadstring`、无数字 id `require` | **无版本标识**（无 tag/hash/file）；**无 LICENSE 文件** | 未审计 | ⛔ **未审计不得使用**（规格 §2） |
+| **PlayerState** | 「待引入，⛔ 未审计」 | **仍不存在**（0 引用）。注意：Scribe 已内置 ProfileStore，因此 PlayerState 可能**不再需要** | — | — | 决策 **D2 需重开**（Scribe 可能顶替它） |
+| **QuickZone** | 「计划内置 `ldgerrits/quickzone@^1.4.x`，MIT，⛔ 未审计」 | **现已存在于 `src/ReplicatedStorage/QuickZone/`（13 文件 / 6,534 行）**，头部标 `--v1.5.1 • LDGerrits`（实际版本 **1.5.1**，高于规格写的 ^1.4.x）。无 `loadstring` / 数字 `require` | v1.5.1（无 hash） | 未审计 | ⛔ **无 LICENSE 文件** + 无 hash + 未审计 |
 
-**结论**：当前运行期外部依赖为**零**。这既是最干净的供应链状态，也意味着 `CERT.md` §4 的工具鉴定只需面对**开发期工具**。
+### 1.1 审计义务已从「无对象」变为「阻塞项」（2026-10-25，用户将框架迁入 `src/` 时一并 vendor）
+
+规格 §2 的五步（锁版本 → 全量审计 → 剥离 → Overrides 改造 → 本文件留档）**每步都未做**。当前缺口清单：
+
+| 缺口 | 影响 | 最小关闭动作 |
+| --- | --- | --- |
+| 两者**都没有 LICENSE 文件** | 合规基础缺失（QuickZone 声称 MIT，但树里无声明文本） | 补 LICENSE 或在上游确认后另存引用 |
+| Scribe **无版本标识** | 无法锁版本、无法判断上游变更 | 定位上游 tag/commit，记 hash |
+| QuickZone 版本 1.5.1 但**无 commit hash** | 同上 | 同上 |
+| 未做**剥离**（用不到的模块/注释） | 38k+6.5k 行进仓库，供应链面与审查面都变大 | 按实际用到的入口裁剪 |
+| 未做 **Overrides 层** | 无法在不改上游的前提下适配 | 建 `Overrides.luau` 约定 |
+
+**规模对比（必须意识到）**：Scribe **38,717 行 = 框架本体（5,486 行）的 7 倍**；两个依赖合计 **45,251 行**。对本项目而言，这比“允许两个例外”的初衷大得多。
+
+**对 DO-178C 认证线的影响**：两者都是**无可鉴定的 COTS/PDS**（直接调 DataStore/引擎），因此**不得被认证核心 require**（I16）—— 门禁 10 的 B 段（依赖闭包）已经能把这类越界抓出来。认证线继续只用自已的 `Port`。
+
+**另外一条未验证的判断**：`Dr.Data`/`Dr.State` 的原计划底层是 PlayerState，而 Scribe 自带 ProfileStore 且是玩家数据/复制库 —— 规格与选型需要重新对齐（决策 D2 重开）。
 
 > 审计方法（可复现）：`grep -rn "Scribe\|PlayerState\|QuickZone" Deuterium TritiumSQL --include=*.luau` 及 `ls Libraries/`。
 > 待办：规格 §3 的依赖表应据此更正（`Deuterium.md` §2 的修订清单已含此项）。

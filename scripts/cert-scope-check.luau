@@ -257,37 +257,47 @@ local function selftest(): boolean
 	end
 
 	-- 路径语义
-	local r1 = resolveRequire("Deuterium/Core/Foundation/Contract.luau", "script.Parent.ErrorHandler")
+	local r1 = resolveRequire(
+		"src/ReplicatedStorage/Deuterium/Core/Foundation/Contract.luau",
+		"script.Parent.ErrorHandler"
+	)
 	expect(
-		r1.kind == "resolved" and r1.path == "Deuterium/Core/Foundation/ErrorHandler",
+		r1.kind == "resolved" and r1.path == "src/ReplicatedStorage/Deuterium/Core/Foundation/ErrorHandler",
 		"1 个 Parent = 同目录"
 	)
 
 	local r2 = resolveRequire(
-		"Deuterium/Types/Contract/Interface.luau",
+		"src/ReplicatedStorage/Deuterium/Types/Contract/Interface.luau",
 		"script.Parent.Parent.Parent.Core.Foundation.ErrorHandler"
 	)
 	expect(
-		r2.kind == "resolved" and r2.path == "Deuterium/Core/Foundation/ErrorHandler",
+		r2.kind == "resolved" and r2.path == "src/ReplicatedStorage/Deuterium/Core/Foundation/ErrorHandler",
 		"3 个 Parent 向上 2 层"
 	)
 
-	local r3 = resolveRequire("Deuterium/Core/Container/Kernel.luau", "script.Parent.Types")
-	expect(r3.kind == "resolved" and r3.path == "Deuterium/Core/Container/Types", "同目录兄弟")
+	local r3 =
+		resolveRequire("src/ReplicatedStorage/Deuterium/Core/Container/Kernel.luau", "script.Parent.Types")
+	expect(
+		r3.kind == "resolved" and r3.path == "src/ReplicatedStorage/Deuterium/Core/Container/Types",
+		"同目录兄弟"
+	)
 
-	local r4 = resolveRequire("Deuterium/Core/X.luau", "'./y'")
+	local r4 = resolveRequire("src/ReplicatedStorage/Deuterium/Core/X.luau", "'./y'")
 	expect(r4.kind == "literal", "路径式 require 必须被识别为不可追溯")
 
-	local r5 = resolveRequire("Deuterium/Core/X.luau", "script.Parent")
-	expect(r5.kind == "resolved" and r5.path == "Deuterium/Core/init", "无尾名 -> 文件夹 init")
+	local r5 = resolveRequire("src/ReplicatedStorage/Deuterium/Core/X.luau", "script.Parent")
+	expect(
+		r5.kind == "resolved" and r5.path == "src/ReplicatedStorage/Deuterium/Core/init",
+		"无尾名 -> 文件夹 init"
+	)
 
 	-- 门禁本身必须会失败。走真实的 audit 路径，用真实存在的文件（DAL E 的 Logging/Debug）：
 	-- 它的 require 指向同目录的 Logger/LogSink，在一个“只含 Debug 自己”的范围里必须是违规。
-	local probe = "Deuterium/Diagnostics/Logging/Debug.luau"
+	local probe = "src/ReplicatedStorage/Deuterium/Diagnostics/Logging/Debug.luau"
 	if fs.isFile(probe) then
 		local lines = stripComments(fs.readFile(probe) :: string)
 		local only = function(path: string): boolean
-			return path == "Deuterium/Diagnostics/Logging/Debug"
+			return path == "src/ReplicatedStorage/Deuterium/Diagnostics/Logging/Debug"
 		end
 		expect(#audit(probe, lines, only) > 0, "B 段必须报出范围外依赖（否则 I16 是空话）")
 		expect(#audit(probe, lines, function(): boolean
