@@ -3,8 +3,17 @@
 -- Central, structured error plumbing for the whole framework.
 -- Every cross-module failure in Deuterium surfaces as a DrError (CoreTypes),
 -- never as a naked thrown string — callers can match on `code`.
-
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+--
+-- CERTIFIED (DAL C, docs/cert/scope.txt) — this file is deliberately PURE: no engine
+-- access, no logging, no other dependency. That is what invariant I16 requires of the
+-- certified core, and it makes the whole module runnable headlessly (like StructuredLog).
+--
+-- `Report` was removed for exactly that reason (2026-10-25): it pulled in
+-- ReplicatedStorage.Debug, i.e. `game` plus the non-certified Dr.Diagnostics layer. It
+-- had zero callers, so reporting is now the non-certified layer's job:
+--   local Logger = require(...Diagnostics.Logging.Logger)
+--   Logger.New("Dr.<Tag>"):warn(ErrorHandler.Render(err))
+-- See docs/cert/HAZARD.md §5.1.
 
 local CoreTypes = require(script.Parent.CoreTypes)
 
@@ -64,10 +73,7 @@ function ErrorHandler.Try(fn: () -> (), code: string, source: string?): CoreType
 	return table.freeze({ ok = false, err = err :: CoreTypes.DrError })
 end
 
--- Log through the Debug pipeline with a stable tag; never throws.
-function ErrorHandler.Report(tag: string, err: unknown): ()
-	local normalized = ErrorHandler.Normalize(err, "DR.UNKNOWN", tag)
-	Debug.warn(`[Dr.{tag}] {normalized.code}: {normalized.message} @ {normalized.source or "?"}`)
-end
+-- NOTE: no logging here on purpose — see the file header. `Render` produces the
+-- one-line string; a Logger (non-certified layer) is what writes it.
 
 return table.freeze(ErrorHandler)

@@ -1,0 +1,74 @@
+# 认证范围（DAL C/D）文件清单 —— 门禁 10（I16）的输入。
+#
+# 格式：每行一个仓库相对路径（正斜杠），'#' 起始为注释，空行忽略。
+# 规则：认证范围内**新增文件必须显式加到这里**（CC1 变更控制 / 不变量 I18）。
+#       未列出的文件=非认证范围（DAL E），认证核心不得 require 它。
+#
+# 权威依据：docs/cert/HAZARD.md §4（逐模块 DAL 与预算）。
+# 校验：scripts/cert-scope-check.sh
+#
+# 现状（2026-10-25）：范围内仅 6 个文件存在（175 行），其余为计划条目。
+# 计划条目一并列出，以便脚本同时报告「计划但尚未创建」与「已创建但违规」。
+
+# ---------- Dr 纯底座（已有 / 计划）----------
+Deuterium/Core/Foundation/CoreTypes.luau
+Deuterium/Core/Foundation/Contract.luau
+Deuterium/Core/Foundation/ErrorHandler.luau
+Deuterium/Core/Foundation/Metadata.luau
+Deuterium/Core/Foundation/Context.luau
+Deuterium/Types/Contract/Interface.luau
+Deuterium/Types/Contract/Precondition.luau
+Deuterium/Types/Contract/Invariant.luau
+
+# ---------- Dr 前置件（D0.3，计划）----------
+Deuterium/Collections/Map/HashMap.luau
+Deuterium/Collections/Map/LRUCache.luau
+Deuterium/Collections/Sorted/PriorityQueue.luau
+Deuterium/Collections/Linear/RingBuffer.luau
+Deuterium/Collections/Linear/Queue.luau
+Deuterium/Collections/Set/Set.luau
+Deuterium/Memory/Buffer/ByteBuffer.luau
+Deuterium/Memory/Pool/ObjectPool.luau
+Deuterium/Memory/Pool/TablePool.luau
+Deuterium/Concurrency/Sync/Mutex.luau
+Deuterium/Concurrency/Async/AsyncQueue.luau
+Deuterium/Concurrency/Scheduling/TaskScheduler.luau
+
+# ---------- TritiumSQL 引擎（T0–T5，计划）----------
+TritiumSQL/Tri/Catalog/NamespaceCodec.luau
+TritiumSQL/Tri/Catalog/SchemaStore.luau
+TritiumSQL/Tri/Catalog/TableRegistry.luau
+TritiumSQL/Tri/Storage/Page.luau
+TritiumSQL/Tri/Storage/HeapLayout.luau
+TritiumSQL/Tri/Storage/PageManager.luau
+TritiumSQL/Tri/Storage/PageCache.luau
+TritiumSQL/Tri/Storage/RowStore.luau
+TritiumSQL/Tri/Storage/Vacuum.luau
+TritiumSQL/Tri/Index/NodeCodec.luau
+TritiumSQL/Tri/Index/BPlusTree.luau
+TritiumSQL/Tri/Index/IndexScan.luau
+TritiumSQL/Tri/Index/UniqueGuard.luau
+TritiumSQL/Tri/Txn/TransactionManager.luau
+TritiumSQL/Tri/Txn/Mvcc.luau
+TritiumSQL/Tri/Txn/LockManager.luau
+TritiumSQL/Tri/Txn/WaitForGraph.luau
+TritiumSQL/Tri/Txn/UndoLog.luau
+TritiumSQL/Tri/Txn/Isolation.luau
+TritiumSQL/Tri/Txn/Savepoint.luau
+TritiumSQL/Tri/Wal/WalWriter.luau
+TritiumSQL/Tri/Wal/WalReader.luau
+TritiumSQL/Tri/Wal/Checkpoint.luau
+TritiumSQL/Tri/Wal/Recovery.luau
+TritiumSQL/Tri/Request/RequestBudget.luau
+TritiumSQL/Tri/Request/RequestQueue.luau
+TritiumSQL/Tri/Request/TokenBucket.luau
+TritiumSQL/Tri/Query/Lexer.luau
+TritiumSQL/Tri/Query/Parser.luau
+TritiumSQL/Tri/Query/Ast.luau
+TritiumSQL/Tri/Query/Analyzer.luau
+TritiumSQL/Tri/Query/LogicalPlan.luau
+TritiumSQL/Tri/Query/Optimizer.luau
+TritiumSQL/Tri/Query/PhysicalPlan.luau
+TritiumSQL/Tri/Query/Executor.luau
+TritiumSQL/Tri/Query/PlanCache.luau
+TritiumSQL/Tri/Testing/SimulatorPort.luau

@@ -52,7 +52,7 @@
 | 7 | **预算门禁**（SQL/集成）：断言 DataStore 请求次数与三态语义（I12） | 测试断言 |
 | 8 | **LOC 记分板**：合计 ≥ 100,000 且各区域 ≥ 预算 70% | `scripts/loc-budget.luau`，**仅 release 分支阻断**（日常只 warn） |
 | 9 | **集成方向**：`Dr.*` 中 `Deuterium/Integration/` 之外出现 `Tri.*` → 阻断（I14） | CI grep |
-| 10 | **认证范围**（I16）：认证范围模块 require 非认证代码 → 阻断 | `scripts/cert-scope-check.sh`（随 C1 交付） |
+| 10 | **认证范围**（I16）：认证范围模块触碰引擎/网络/非认证层，**或依赖范围外模块** → 阻断 | ✅ 已交付 `scripts/cert-scope-check.luau`（Lune，A 字面 + B 依赖闭包，自带 `--selftest`） |
 | 11 | **追溯完整性**：每条 HLR/LLR 有测试；认证范围内无“无需求的可执行语句” | `docs/cert/TRACE.md` 生成器（随 C3 交付） |
 | 12 | **结构覆盖**：认证范围达 100% statement，未覆盖行必须有解释或问题报告 | 覆盖工具（随 C4 交付） |
 
@@ -73,6 +73,7 @@
 | D7 | QuickZone 是否引入 | 引入 / 不引入 | 引入，推迟到世界层动工前 | DECIDED | D6.6 |
 | D8 | 目录落地 | 现树 + Rojo 映射 / 迁到 `src/ReplicatedStorage/` | **现树 + Rojo 映射**（现有 require 字符串已与现树一致） | DECIDED | Step 2 |
 | D9 | 集成层事件机制 | 直接回调 / `Dr.Signal` 广播 | 待 `Dr.Signal`（D2.0）落地后定；默认先回调（依赖更少、更快），Signal 作为可选广播 | **OPEN** | Step 54/57 |
+| D10 | 合规目标定性 | 适航级全合规 / 航空级可靠性工程 | **可审查的航空级可靠性工程，保留 DO-178C 目标结构与升级路径**（理由与四项裁剪：`docs/cert/HAZARD.md` §1）。升级为全合规是**加法**而非重写 | **DECIDED** | — |
 
 ## 4. 关键路径
 
@@ -143,5 +144,6 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v6** | **C1 完成 + 门禁 10 交付**：裁定合规目标（D10）；危害 H1–H7→DAL 固化并逐模块映射；**12k 预算重切**（原表自身超帽子 400 行 → 11,200 + 800 余量）；`ErrorHandler` 按 I16 净化（删 `Report`，零调用方）；`cert-scope-check` 以 Lune 重写并带自检 —— **发现它只查字面、漏依赖闭包** → 补 B 段，并修正 `script.Parent` 语义（N 个 Parent 只向上 N−1 层） |
 | **v5** | **引入 DO-178C 适配（`CERT.md`）**：新增不变量 I16–I19·门禁 10–12·风险 R16–R20；范围砍为三条线（认证 ≤12k / 产品 / 工具）；C1–C6 插入所有功能 Wave 之前；COTS/平台/工具鉴定逐条登记；已写 5k 行按 PDS 式评估处理 |
 | **v4** | **全面一致性优化**：不变量/门禁/决策/风险各自收口为唯一出处；Wave ID 统一；修正 LOC 加总错误（集成层核心 8,200→8,400、G4+G5 5,400→4,950）；补 `D2.0 Signal`；新增进度登记与验收 ID 规范；`SCALE.md` 附录 B 升级为功能追踪矩阵 |
