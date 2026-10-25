@@ -90,7 +90,9 @@ DAL A/B **不主张**，理由见 §0。任何把等级往上抬的尝试都必�
 ### 3.2 非认证范围（Uncertified, DAL E）
 
 - 一切触碰 `game` 的代码：`Dr.Runtime.*`、`Tri.Runtime.Bindings.{Standalone,Deuterium}`、`Dr.Net`、`Dr.Security`、`Dr.Diagnostics`、`Dr.ECS`、`Dr.World`、`Dr.Plugin`、`Dr.Testing`、示例与工具。
+- **第三方树**：`src/ReplicatedStorage/{Scribe,QuickZone}/**` 及其**适配器**（`*/Adapter/*`）—— 见上面的条目。
 - **`Tri.Testing.SimulatorPort` 例外且必须在范围内**：它是认证信用所依赖的确定性底座（§4.3），是"验证用模型"，不是被测软件。
+- **Scribe（38,717 行）与 QuickZone（6,534 行）**：无可鉴定的 **COTS/PDS**（各自直调 `game`/DataStore；无生命周期数据、无版本锁定、无 LICENSE、未审计）→ **永久出范围**；它们的**适配器**也属产品线。I16 禁止认证核心 require 它们，门禁 10 的 B 段（依赖闭包）已能静态拦住越界。详见 `THIRDPARTY.md`。
 - 非认证代码**不得**被认证核心 require（CI 阻断，见 §9.3 的 I16 守卫）。
 
 ### 3.3 与 100k 行目标的冲突（必须明说）

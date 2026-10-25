@@ -31,7 +31,10 @@
 | §1 `Dr.Data` | Store/Reliability/Processing/Observe 四组，与 TritiumSQL 重叠 | 收窄为会话态：`Core` + `Store`（PlayerData/EphemeralData）+ `Reliability.Transaction`（**跨存储 Saga 协调者**）+ `Processing.Migrator`。其余标注「▶ 见 TritiumSQL」（I8） |
 | §1 `Dr.State.Sync.Replicator` | 底层 PlayerState Replica | 不变（复制 ≠ 持久化）；数据源增加 G4 的变更流 |
 | §1 `Dr.Signal` | 排在 SERVICE 层 | **提前到 `D2.0`** —— Knit 把 Signal 当基础设施，没有它 I13 薄入口立不住 |
-| §3 `PlayerState` | 「数据/复制基底」 | 「**复制**基底；持久化职责移交 TritiumSQL」（决策 D2） |
+| §3 `PlayerState` | 「数据/复制基底」 | **取消**：Scribe 自带 `Internal/Store/ProfileStore` 且就是玩家数据/复制载体 → PlayerState 的存在理由消失（D2/D2-bis 结案） |
+| §3 `Scribe` | 「日志/观测」 | ❌ **描述错了**。实测 Scribe 是**玩家数据/复制/经济/排行榜库**，并自带 `Log/Metrics/Health/Signal/Sched/Transport/Wire`。框架级日志仍是我们自己的 `Dr.Diagnostics`；两库内部的 Log 是**库内部实现**，不向外暴露 |
+| §3 `QuickZone` | 「计划内置 `^1.4.x`」 | 实际已入库且为 **v1.5.1**；集成方式、所有权与适配器见 `THIRDPARTY.md` |
+| §0 不变量 | I1–I15 | 追加 **I20**（第三方只经适配器）与 **I21**（不重复造）—— 定义在 `README.md` §1，理由在 `THIRDPARTY.md` |
 | §3 外部依赖 | — | 增加 Scribe 审计留档要求 + 「TritiumSQL 存储层被 DataStore 封顶」声明（`SCALE.md` §1.2） |
 | §4 目录落地 | `src/ReplicatedStorage/Deuterium/...` | 现树：`Deuterium/` → Rojo 映射 `ReplicatedStorage.Deuterium`（决策 D8） |
 | §5.4 性能 | — | 增加一条：集成层（G 路径）的请求次数同样受 I12 约束 |
@@ -109,6 +112,18 @@
 | `D4.6` | `Dr.State.Machine`（StateMachine/StateChart/Transition）+ `History`（UndoRedo/StateHistory） | `AC-D4.6`：状态机切换可倒序回溯出中间值 |
 | `D4.7` | `Dr.State.Sync`（Replicator/Reconciler/SyncPolicy/ConflictResolver）；数据源接 G4 变更流 | `AC-D4.7`：多端同改同字段结果一致；server-wins 默认走通 |
 
+> ⚠ **第三方集成后 `D4.x` 大幅收缩（`THIRDPARTY.md` §2/§6）**：
+> - `D4.1`（PlayerState 审计 + 内置）**取消** → 改为 Scribe 审计与适配
+> - `D4.2`（`Dr.Data.Store.PlayerData` 自研）**取消** → 由 `Dr.Data.Adapter.ScribeAdapter` 承担
+> - `D4.7`（`Dr.State.Sync.Replicator` 自研）**取消** → 由 `Dr.State.Adapter.ScribeReplica` 承担
+> - `D4.3`（Saga 协调）**保留并扩展**为「Scribe 会话态 ↔ TritiumSQL 持久表」的桥
+> - `D4.5`/`D4.6`（响应式 Store / 状态机 / 历史）**保留** —— Scribe 无此能力，属我们
+>
+> ⚠ `D6.6` 的 `Dr.World.Spatial` 三件套改为 **QuickZone 适配器**（规格原意）；`Dr.World.Scene` 仍自研。
+>
+> **新增 `D0.6` · 第三方集成准备**（在 D0.3 之前或并行）：
+> ① 审计五步（顺序：**先剥离再审计**） ② 5 个适配器骨架（`THIRDPARTY.md` §3） ③ `scripts/thirdparty-check.luau` 门禁（I20）。
+>
 > `D4.8`（TritiumAdapter）已升级为完整集成层 `Dr.Integration`（18 模块），见 `INTEGRATION.md` §5.1 与 `STEPS.md` Step 50–57。
 > ▶ 原 `D4.3`（MVCC/WAL/Checkpoint）与 `D4.4`（QueryEngine/Cache/DataValidator）→ `TritiumSQL.md` 的 `T3`。
 
