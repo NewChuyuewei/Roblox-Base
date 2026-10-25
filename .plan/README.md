@@ -38,7 +38,7 @@
 | --- | --- | --- |
 | 1 | **可运行**：`rojo build` 成功且 `SelfTest.RunAll()` 全绿 | CI `build` 阶段 |
 | 2 | **可测**：headless 测试在 CI 跑（Lune）；「Studio 手点」不能作为唯一验收 | CI `test` 阶段 |
-| 3 | **可静态检查**：`stylua --check` + `selene` + `luau-lsp analyze` | CI `lint`/`types` 阶段 |
+| 3 | **可静态检查**：`stylua --check` + `luau-lsp analyze` + `scripts/p0-check.sh` | CI `lint`/`types` 阶段 |
 | 4 | **可观测**：每个决策点有结构化日志；黑盒代码视为未完成 | Review |
 | 5 | **P0 规约**：热路径禁字符串查表 / 匿名闭包分配 / `table.insert` 扩容 | `scripts/p0-check.sh` 基线只降不升 |
 | 6 | **依赖门禁**：运行期外部依赖仅 Scribe / PlayerState / QuickZone，且走规格 §2 五步审计；开发期工具不计入 | `MEMORY.md` 审计留档 |

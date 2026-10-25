@@ -1,0 +1,3 @@
+table.insert(	26
+game:GetService(	48
+loadstring(	0

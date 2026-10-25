@@ -1,0 +1,15 @@
+# StyLua config — every key below was verified against the pinned stylua 2.6.0
+# by a trial run (stylua parses this file strictly and errors on unknown keys).
+column_width = 110
+indent_type = "Tabs"
+quote_style = "AutoPreferDouble"
+call_parentheses = "Always"
+syntax = "Luau"
+
+# `line_endings` is deliberately NOT set. stylua 2.6.0 accepts only "Unix" or
+# "Windows" (there is no "Auto"), and "Unix" is the default — which is what we want:
+# the repository is normalized to LF by .gitattributes, so CI checks LF content.
+# Note for Windows checkouts: if core.autocrlf=true the working copy is CRLF, which
+# makes `stylua --check` report a whole-file diff. Refresh the working tree with
+#   git checkout-index -f -a
+# after .gitattributes takes effect, and it will be LF from then on.

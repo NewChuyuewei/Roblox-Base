@@ -1,0 +1,11 @@
+# Normalize line endings in the repository to LF.
+#
+# Why: with core.autocrlf=true and no attributes, the working copy is CRLF while the
+# index is LF. Tools that emit LF (stylua) then report a whole-file diff for every file,
+# which makes `stylua --check` useless as a gate. Committed content stays LF, and
+# stylua.toml sets line_endings = "Auto" so local checks do not fight the checkout.
+* text=auto eol=lf
+
+*.rbxlx binary
+*.rbxl binary
+*.rbxm binary

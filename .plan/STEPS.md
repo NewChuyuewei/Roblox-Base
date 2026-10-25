@@ -31,7 +31,7 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1–3 ✅ / 4–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–6 ✅ / 7–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | — | — | — | — |
@@ -45,6 +45,10 @@
 | 2026-10-24 | **Step 1** | ✅ | `rokit.toml` 已提交（`chore(ci): pin dev toolchain via rokit`）；`rokit install` 幂等 exit 0 |
 | 2026-10-24 | **Step 2** | ✅ | `rojo build` exit 0（174,927 B）；`rojo sourcemap` 的 ModuleScript 数 == 69 == `.luau` 文件数 |
 | 2026-10-24 | **Step 3** | ✅ | 5 个文件 429 行；build exit 0；ModuleScript 75（含 Debug 双映射）；StructuredLog 在 Lune 实测通过 |
+| 2026-10-25 | **Step 4** | ✅ | `.luaurc`；修正开关为 `--base-luaurc`（非 `--settings`） |
+| 2026-10-25 | **Step 5** | ◐ | `stylua.toml` 逐键实测通过；`.gitattributes` 修行尾；**selene 已移除**（0.32.0 在 Luau 插值字符串上 panic 且无新版） |
+| 2026-10-25 | **Step 5b** | ✅ | `scripts/p0-check.sh` 基线 26 / 48 / 0，棘轮生效 |
+| 2026-10-25 | **Step 6** | ◐ | stylua 全仓 **0 需格式化**；p0 OK；luau-lsp 阻塞于 defs（Step 8） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -149,36 +153,58 @@ lune     = "lune-org/lune@0.11.1"
 - **纯逻辑部分已在 Lune 真实跑通**（见 Step 7 的预答）：`Join("a:", 1, true)` → `a:\t1\ttrue`；`Format(New("warn","Dr.K","hi",{n=3,z="x"}))` → `[warn][Dr.K] hi {n=3 z=x}`；循环引用不挂死。
 - 未验：`Debug.print` 在 Studio 的实际输出前缀、`SelfTest.RunAll()` 的 8 个用例。两者都需要 `game`（下一步 Step 10 才能跑），且静态门禁（stylua/selene/luau-lsp）要等 Step 4–6 才能跑。
 
-**Step 4 · `.luaurc`**
+**Step 4 · `.luaurc`** —— 已完成（2026-10-25）。文件内容：
 
 ```json
 { "languageMode": "strict", "lint": { "*": true }, "lintErrors": true, "typeErrors": true }
 ```
 
-判据：`luau-lsp analyze --settings=.luaurc Deuterium/Diagnostics/Logging/Logger.luau` 无 error。
+**修正**：读取 `.luaurc` 的开关是 **`--base-luaurc`**，不是原计划写的 `--settings`（`--settings` 传的是 LSP-style settings，两回事）。已用 `luau-lsp analyze --help` 核实。
 
-**Step 5 · `stylua.toml` + `selene.toml`**
+判据：待 Step 8（需 `globalTypes.d.luau` 才能真正 typecheck）；目前只确认文件存在且格式合法。
+
+**Step 5 · `stylua.toml`（✅ 已完成）· `selene.toml`（❌ 已取消）**
 
 ```toml
-# stylua.toml
+# stylua.toml — 每个键都对 stylua 2.6.0 实测过（stylua 严格解析配置，未知键直接报错）
 column_width = 110
 indent_type = "Tabs"
 quote_style = "AutoPreferDouble"
 call_parentheses = "Always"
+syntax = "Luau"
 ```
 
-```toml
-# selene.toml
-std = "roblox"
-exclude = ["Deuterium/Deuterium.md"]
-```
+**selene 被移除**（不是跳过，是工具本身不可用）：
 
-要点：**不自研 selene 插件**做 P0 巡检（成本高）；改用 Step 5b 的 grep 基线脚本。
+| 事实 | 证据 |
+| --- | --- |
+| selene 0.32.0 在 **Luau 反引号插值字符串**上 panic | 最小复现：只有 `local n = 7` / `` local s = `value={n}` `` 的文件 → `internal error: entered unreachable code`（full_moon 3.0.0 tokenizer）。纯 Lua / `+=` / `..=` 均正常 |
+| 本仓库**到处**用插值字符串 | 既有 69 文件里 ErrorHandler/Kernel/FeatureFlags 全在用；Step 3 新增的 5 个文件中 3 个（StructuredLog/LogSink/SelfTest）触发了 panic |
+| **无升级路径** | `api.github.com` 查到 selene 最新 release 就是 0.32.0 |
+| 它的 roblox std 也不可用 | `std = "roblox"` 会在运行时拉 `raw.githubusercontent.com/CloneTrooper1019/Roblox-Client-Tracker/API-Dump.json`（第三方供应链 + 网络依赖），本环境代理也不通 |
 
-**Step 5b · `scripts/p0-check.sh`**：统计 `Core/`、`Net/`、`Storage/`、`Index/`、`Request/` 下 `table.insert(`、`game:GetService(`、`loadstring(` 的出现次数，与 `scripts/p0-baseline.txt` 比较，**只允许下降**。
-判据：当前树退出码 0；人为加一行 `table.insert` 后退出码非 0。
+**替代方案（已落到门禁 3）**：`luau-lsp analyze` 本身就跑 luau-analyze（**lint + 类型一次完成**），P0 正则规则交给 Step 5b 的 grep 基线脚本。结果：**工具少一个、供应链少一项、能力不降**。
 
-**Step 6 · 静态检查全绿**：`stylua --check Deuterium` + `selene Deuterium` + `bash scripts/p0-check.sh`。通常需要一次全仓 `stylua Deuterium` 格式化 → 单独一个 `style:` 提交，避免污染后续 diff。
+**行尾陷阱（已修）**：`core.autocrlf=true` 且无 `.gitattributes` 时，工作区是 CRLF、索引是 LF，而 stylua 只输出 LF → `stylua --check` 对**每个文件**报全文 diff，门禁完全失效。已加 `.gitattributes`（`* text=auto eol=lf`）。另：`line_endings` 在 stylua 2.6.0 只接受 `Unix`/`Windows`（**没有 `Auto`**，实测报错），故不设它，靠 `.gitattributes` 把工作区刷成 LF。
+
+**Step 5b · `scripts/p0-check.sh`** —— 已完成（2026-10-25）。统计热路径目录下 `table.insert(`、`game:GetService(`、`loadstring(` 的出现次数，与 `scripts/p0-baseline.txt` 比较（**棘轮：只允许下降**），并给 `--write-baseline` 重录。
+
+基线（首次）：`table.insert(` **26** · `game:GetService(` **48** · `loadstring(` **0**。
+
+判据（已达）：复跑退出码 0 并输出对照表。
+
+> **副产品发现**：`Core/`+`Net/` 里有 **48 处 `game:GetService(`** —— 而 I10 要求引擎 API 只出现在 `Dr.Runtime`。这正是不变量 I10 要收敛的东西，也是 headless 测试难的根因（每个模块都在加载期碰 `game`）。不在本 Step 修，作为 `D0.4` 之后的固定项登记。
+
+**Step 6 · 静态检查全绿** —— 部分完成（2026-10-25）。
+
+| 门禁 | 结果 |
+| --- | --- |
+| `stylua --check Deuterium TritiumSQL` | ✅ **0 个文件需要格式化**（原计划预判的「全仓格式化大提交」**不必要**——代码本来就是 tabs/双引号风格） |
+| `scripts/p0-check.sh` | ✅ OK（棘轮基线已立） |
+| `luau-lsp analyze` | ⏭ 阻塞于 `globalTypes.d.luau`（Step 8） |
+| ~~`selene`~~ | ❌ 已移除，见 Step 5 |
+
+判据：以 **Step 8 的 CI 四阶段全绿**为最终判据。
 
 **Step 7 · headless 探针（15 分钟，决定 CI 测试策略）**
 

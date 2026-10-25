@@ -9,9 +9,16 @@
 #   HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890 rokit install --no-trust-check
 # CI runner 若同样受限，需在 GitLab CI 里配代理变量（Step 8）。
 
+# selene was REMOVED 2026-10-25: selene 0.32.0 (its newest release) panics inside
+# full_moon 3.0.0's tokenizer on Luau interpolated strings (`text {expr}`), which this
+# codebase uses pervasively. Reproduced minimally: a file containing only
+#   local n = 7 / local s = `value={n}`
+# crashes selene with "internal error: entered unreachable code". Luau linting is
+# therefore covered by `luau-lsp analyze` (which runs luau-analyze: lint + types in one
+# tool), and the P0 regex rules by scripts/p0-check.sh.
+
 [tools]
 rojo = "rojo-rbx/rojo@7.7.1"
 lune = "lune-org/lune@0.11.1"
-selene = "Kampfkarren/selene@0.32.0"
 stylua = "JohnnyMorganz/StyLua@2.6.0"
 luau-lsp = "JohnnyMorganz/luau-lsp@1.70.1"
