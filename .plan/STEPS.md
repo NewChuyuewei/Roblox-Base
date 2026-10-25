@@ -34,7 +34,7 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1–6 ✅ / 7–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–6 ✅ · **7 ✅** · **9 ✅** / 8,10–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | **70（C1）✅ · 71（C2）✅** | ✅ | — | — |
@@ -55,6 +55,8 @@
 | 2026-10-25 | **Step 6** | ◐ | 22 个文件已格式化，`stylua --check` exit 0；p0 OK；luau-lsp 阻塞于 defs（Step 8） |
 | 2026-10-25 | **Step 70（C1）** | ✅ | 危害/DAL/范围固化；预算 12,400→11,200+800；`ErrorHandler` 按 I16 净化（p0 棘轮 48→47）；**门禁 10 交付并自检 9/9** |
 | 2026-10-25 | **Step 71（C2）** | ✅ | 7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/README.md` 索引；分表目标数经三源核实并做自洽校验（53+9+9=71）；偏差 DV-1…DV-5 固化 |
+| 2026-10-25 | **Step 7** | ✅ | `docs/headless.md`：`debug.sethook` 不可用（C4 改源码插桩）；拓扑序 setfenv loader 跑通；**真 SelfTest 8/8，修掉 3 个真 bug** |
+| 2026-10-25 | **Step 9** | ✅ | `AGENTS.md` + `MEMORY.md`；Scribe 审计结论=**本仓库不存在**（与规格声明不符）；运行期外部依赖为零；**D6 关闭** |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -230,7 +232,20 @@ return {
 
 判据：以 **Step 8 的 CI 四阶段全绿**为最终判据。
 
-**Step 7 · headless 探针（15 分钟，决定 CI 测试策略）**
+**Step 7 · headless 探针** —— ✅ 已完成（2026-10-25）。完整结果固化在 **`docs/headless.md`**（25 项探针，三轮）。
+
+**第二轮 + 第三轮实测（推翻了两条原计划假设，找到一条更好的路）**：
+
+| 能力 | 结果 | 后果 |
+| --- | --- | --- |
+| `debug.sethook` | **不存在** | **行钩子覆盖路线作废**（原计划 C4 的机制） |
+| `loadstring` + `setfenv` | 均可用 | **源码插桩 + 加载** 可行 |
+| 文本插桩端到端 | **跑通**：插桩后 `f(4)=210`，命中行可报告，且能区分取/不取的分支 | C4 路线改为**源码插桩** |
+| `luau` 库 / `_G` 当作全局表 | **都不行** | `luau.load(environment)` 路线作废；env 必须**显式拷标准库名** |
+| 拓扑序 + `setfenv` + 恒等 `require` 加载真模块 | **跑通** | **Q1 从“不能”变为“能”**：`script.Parent` 模块可 headless 加载 |
+| headless 跑真 SelfTest | **8/8 通过** | 门禁 2 从“应该有”变为“已证明可行” |
+
+**最大副产品（写进门禁 2 的理由）**：把测试跑起来当场找到并修掉 **3 个真 bug** —— `Logger` 方法写成无 self 的闭包、调用方用冒号，导致 `self` 漏进 varargs（`log:info("a",1)` 的消息变成 `table: 0x…\ta\t1`，`log:SetLevel("debug")` 直接报 `invalid level: table`）。**之前没人跑过那 8 个用例** —— 未执行的测试不是测试，是注释。
 
 `lune run scripts/probe-headless.luau`，依次探测哪一级成功：① `_G.game = {...}` 后 require 含 `game` 的模块；② `luau.load(source, { environment = { game = ... } })`；③ 都不行 → CI 只跑**纯逻辑**模块，其余靠 Studio 回归。
 
@@ -286,8 +301,13 @@ test:
 
 要点：`types/globalTypes.d.luau`（Roblox 全局类型）需**一次性**取得并入库固化（来源在首次跑通时确认，之后不联网）；保留 GitLab 默认 SAST 模板作为额外信号；首次跑通前 `types`/`test` 可先 `allow_failure: true`，Step 12 后全部改回阻断。
 
-**Step 9 · `AGENTS.md` + `MEMORY.md`**：`AGENTS.md` 写分层依赖规则、`Dr.*` 命名、I8–I15 摘要、门禁命令、禁止事项；`MEMORY.md` 写依赖审计留档表（Scribe 版本/commit/审计人/结论/改动点 + PlayerState/QuickZone 占位）。Scribe 审计搜 `loadstring` / `HttpService` / `require(<数字 id>)` / `getfenv`。
-判据：Scribe 那行已填；**决策 D6 关闭**。
+**Step 9 · `AGENTS.md` + `MEMORY.md`** —— ✅ 已完成（2026-10-25）。
+
+`AGENTS.md`：仓库结构、7 条硬规则、**已验证的工具调用（含 5 个踩过的坑位）**、两条线不混、headless 怎么写、收工动作。
+`MEMORY.md`：依赖审计留档 + 开发期工具链 + 网络/环境事实 + 本会话交付物清单。
+
+**Scribe 审计的实测结论（与规格声明不符，必须记下）**：`Deuterium.md` §3 称「Scribe 已内置 `Libraries/Scribe`，⚠️ 待审计」，但**本仓库没有 `Libraries/` 目录，全仓 `grep Scribe` 命中 0 处**。→ 不存在则无可审计，无需五步流程；将来真正引入时再走。**运行期外部依赖目前为零**（Scribe/PlayerState/QuickZone 均无引用）。
+判据：达成 —— 三行已填（含实测结论）；**决策 D6 关闭**。
 
 **Step 10 · 全仓库 require 冒烟**（Studio 命令栏）
 

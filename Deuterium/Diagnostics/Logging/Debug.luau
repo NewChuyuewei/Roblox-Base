@@ -12,14 +12,16 @@ local Logger = require(script.Parent.Logger)
 
 local facade = Logger.New("Dr")
 
+-- Logger methods take self, so these are COLON calls. Dot calls here would leak the
+-- facade table into the message (see the note in Logger.luau).
 return table.freeze({
 	print = function(...: any): ()
-		facade.info(...)
+		facade:info(...)
 	end,
 	warn = function(...: any): ()
-		facade.warn(...)
+		facade:warn(...)
 	end,
 	err = function(...: any): ()
-		facade.error(...)
+		facade:error(...)
 	end,
 })

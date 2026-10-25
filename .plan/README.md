@@ -70,7 +70,7 @@
 | D3 | 引擎 API 形态 | 只 SQL 字符串 / 只类型化构建器 / 两者 | 两者，但 SQL 必须 Init 期编译（I11） | DECIDED | T0.x |
 | D4 | headless 测试运行时 | Lune / 自研伪 shim | Lune；`game` 注入能力由 Step 7 探针决定，失败则 CI 只覆盖纯逻辑模块 | DECIDED | — |
 | D5 | 发布形态 | Wally 包 / submodule | Wally：`vospek/deuterium` + `vospek/tritiumsql`，独立版本号 | DECIDED | D7.6 / T10 |
-| D6 | Scribe 审计 | 审计后保留 / 换自研 | 审计后保留（约 30 分钟人工），结论入 `MEMORY.md` | DECIDED | Step 9 |
+| D6 | Scribe 审计 | 审计后保留 / 换自研 | **实测结论：本仓库根本没有 Scribe**（无 `Libraries/`，全仓 grep 命中 0）→ 无可审计，无需五步流程。规格 §3 的「已内置」声明与仓库事实不符，已列入规格修订清单 | **CLOSED** | — |
 | D7 | QuickZone 是否引入 | 引入 / 不引入 | 引入，推迟到世界层动工前 | DECIDED | D6.6 |
 | D8 | 目录落地 | 现树 + Rojo 映射 / 迁到 `src/ReplicatedStorage/` | **现树 + Rojo 映射**（现有 require 字符串已与现树一致） | DECIDED | Step 2 |
 | D9 | 集成层事件机制 | 直接回调 / `Dr.Signal` 广播 | 待 `Dr.Signal`（D2.0）落地后定；默认先回调（依赖更少、更快），Signal 作为可选广播 | **OPEN** | Step 54/57 |
@@ -127,6 +127,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | R18 | **覆盖工具做不出来**（`debug.sethook` 在 Lune 不可用） | 高 | C4 的成功性探针失败 | C4 第一步先做探针；失败则 7.2 目标无法关闭，**DAL C 本身需重新评估**（已写入 `CERT.md` 末尾的未决项） | `CERT.md` §7.2 |
 | R19 | **假独立性**（拿同一会话的复审当独立验证） | 高 | §7.5 的偏差未被记录 | 永久偏差登记 + 独立会话留证；**不声称**组织独立性 | `CERT.md` §7.5 |
 | R20 | **工具鉴定被默认豁免**（“用工具不签定”） | 中 | 某工具有产出却被当作自动免鉴定 | `CERT.md` §4.4 逐条关闭 TQL 判定，无一件“默认” | `CERT.md` §4.4 |
+| R21 | **插桩器自身出错污染覆盖结论**（高估→假绿；低估→无谓返工） | 高 | 插桩器统计的可执行行与 `debug.info` 的函数范围不一致 | 插桩器必须有自己的测试；两来源交叉校验；R18 已部分关闭（路线已通，剩这个） | `docs/headless.md` §7 |
 
 ## 7. 验收 ID 规范
 
@@ -145,6 +146,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v8** | **Step 7 + Step 9 完成**：`docs/headless.md`（headless 能力基线）· `AGENTS.md` · `MEMORY.md`。**两条原假设被实测推翻**（`debug.sethook` 不存在 → C4 改**源码插桩**；`_G` 不是全局表 → env 必须显式拷标准库）；拓扑序 `setfenv` loader 跑通，**真 SelfTest 8/8**，并当场修掉 **3 个真 bug**（Logger 冒号调用漏 self）。Scribe 审计结论=**本仓库不存在**（D6 关闭），运行期外部依赖为零。新增风险 R21 |
 | **v7** | **C2 完成**：7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/` 索引。**目标关闭表按 Annex A 分表建立并带自洽校验**（明示的 8 表相加 = 53；A-5=9†、A-7=9† 则合计 = 71，与三源一致的 DAL A 总数吻合）。新增 `TYPES.md`（DO-178C §6.7/6.7.1 对动态语言的要求）→ 顺带暴露 `BIGINT` 的 2^53 降级未写明，已在 `TritiumSQL.md` 补上 |
 | **v6** | **C1 完成 + 门禁 10 交付**：裁定合规目标（D10）；危害 H1–H7→DAL 固化并逐模块映射；**12k 预算重切**（原表自身超帽子 400 行 → 11,200 + 800 余量）；`ErrorHandler` 按 I16 净化（删 `Report`，零调用方）；`cert-scope-check` 以 Lune 重写并带自检 —— **发现它只查字面、漏依赖闭包** → 补 B 段，并修正 `script.Parent` 语义（N 个 Parent 只向上 N−1 层） |
 | **v5** | **引入 DO-178C 适配（`CERT.md`）**：新增不变量 I16–I19·门禁 10–12·风险 R16–R20；范围砍为三条线（认证 ≤12k / 产品 / 工具）；C1–C6 插入所有功能 Wave 之前；COTS/平台/工具鉴定逐条登记；已写 5k 行按 PDS 式评估处理 |

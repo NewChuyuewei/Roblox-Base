@@ -5,6 +5,14 @@
 -- already pass pre-formatted strings plus extra values, and they must keep working
 -- unchanged. Message joining is StructuredLog.Join's job.
 --
+-- Methods take an explicit `self` and are called with COLON syntax: `log:info("a", 1)`.
+-- This is load-bearing, not style. An earlier version used self-less closures
+-- (`info = function(...)`) and the headless suite caught it: with colon syntax `self`
+-- silently becomes the first vararg, so `log:info("a", 1)` joined the logger TABLE into
+-- the message and `log:SetLevel("debug")` passed the table where a level was expected.
+-- Three of the eight logging tests failed on that one root cause. It was invisible in
+-- Studio simply because nobody had run the suite there yet.
+--
 -- No ErrorHandler require on purpose — ErrorHandler requires Debug, which requires
 -- Logger, so depending on it here would close a cycle. Programmer errors use `assert`.
 
@@ -16,12 +24,12 @@ export type Record = StructuredLog.Record
 export type Sink = LogSink.Sink
 
 export type Logger = {
-	debug: (...any) -> (),
-	info: (...any) -> (),
-	warn: (...any) -> (),
-	error: (...any) -> (),
-	SetLevel: (level: Level) -> (),
-	GetLevel: () -> Level,
+	debug: (self: Logger, ...any) -> (),
+	info: (self: Logger, ...any) -> (),
+	warn: (self: Logger, ...any) -> (),
+	error: (self: Logger, ...any) -> (),
+	SetLevel: (self: Logger, level: Level) -> (),
+	GetLevel: (self: Logger) -> Level,
 }
 
 -- "info" keeps every legacy Debug.print visible while still silencing debug chatter.
@@ -49,23 +57,23 @@ function Logger.New(tag: string, sink: Sink?): Logger
 	end
 
 	return table.freeze({
-		debug = function(...: any): ()
+		debug = function(_self: Logger, ...: any): ()
 			emit("debug", ...)
 		end,
-		info = function(...: any): ()
+		info = function(_self: Logger, ...: any): ()
 			emit("info", ...)
 		end,
-		warn = function(...: any): ()
+		warn = function(_self: Logger, ...: any): ()
 			emit("warn", ...)
 		end,
-		error = function(...: any): ()
+		error = function(_self: Logger, ...: any): ()
 			emit("error", ...)
 		end,
-		SetLevel = function(level: Level): ()
+		SetLevel = function(_self: Logger, level: Level): ()
 			currentLevel = level
 			currentRank = StructuredLog.Rank(level)
 		end,
-		GetLevel = function(): Level
+		GetLevel = function(_self: Logger): Level
 			return currentLevel
 		end,
 	}) :: Logger
