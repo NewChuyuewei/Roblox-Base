@@ -1,6 +1,6 @@
 # TritiumSQL — 实施计划
 
-> **来源**：重写自 `Text File.txt`（原代号 VoxDB / VQL，已废弃）
+> **来源**：重写自原 `Text File.txt`（原代号 VoxDB / VQL，已废弃）—— 该文件已于 commit `5d4fabe` 删除，历史里可查；本文件自此是 SQL 的唯一计划出处。
 > **命名**：产品 **TritiumSQL** · 模块前缀 `Tri.*`（对齐 `Dr.*`）· 方言 **TriSQL** · 键前缀 `tri:` · 发布包 `vospek/tritiumsql`
 > **定位**：在 `DataStoreService`（本质 KV）之上，做关系型严谨性 + NoSQL 灵活性 + B+ 树索引 + 企业级扩展。
 > **权威划分**：物理天花板与功能面 → `SCALE.md` §1.3 / §5；规模预算 → `SCALE.md` §2；与 Deuterium 的互通 → `INTEGRATION.md`；执行步骤 → `STEPS.md` Step 30–47 / 60–65；**DAL 与认证约束 → `CERT.md`**。
@@ -257,7 +257,7 @@ SELECT * FROM events WHERE payload->>'type' = 'kill' AND payload->'meta'->>'weap
 | **`T10`** | 发布：Wally `vospek/tritiumsql` · API 文档 · 兼容策略 | `AC-T10`：从 Wally 安装即可用；封顶声明入 release note |
 | **`T11`** | v1.5：视图 · CTE · `FOR UPDATE` · 仅索引扫描 · 参数化计划 · JSON 格式 EXPLAIN | `AC-T11` |
 
-**与 `Text File.txt` 路线图的差异**：见 `SCALE.md` §7。
+**与原 `Text File.txt` 路线图的差异**：见 `SCALE.md` §7。
 
 ---
 

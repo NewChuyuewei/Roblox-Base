@@ -1,7 +1,8 @@
 # Plan of Record — 宪法
 
 > 仓库：`gitlab.com/vospek/roblox-dev/framework`
-> 本目录是**计划层**（排期 / 边界 / 验收 / 决策）。规格层在原位：`../Deuterium/Deuterium.md`（框架规格）、`../Text File.txt`（SQL 原始设想，已由 `TritiumSQL.md` 取代、原位保留对照）。
+> 本目录是**计划层**（排期 / 边界 / 验收 / 决策）。规格层：`../Deuterium/Deuterium.md`（框架规格）、`TritiumSQL.md`（SQL 计划）。
+> 原 `Text File.txt`（SQL 原始设想）已由 `TritiumSQL.md` 取代并**删除**（commit `5d4fabe`）—— 历史里仍可查。
 
 ## 0. 文件地图与阅读顺序
 

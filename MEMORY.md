@@ -45,7 +45,7 @@
 | `rokit add` 首次需先 `rokit trust <owner/repo>` | 否则报 `has not been marked as trusted` | `rokit trust` → `rokit add` |
 | PATH 上 `~/.aftman/bin` 早于 `~/.rokit/bin`，且 aftman 的 4 个 shim 因其全局 manifest 里对应行被注释而**全部报错** | 裸命令 `rojo`/`stylua`/`luau-lsp` 会命中坏 shim | 用 tool-storage 绝对路径（见 `AGENTS.md` §3） |
 | git 已装守卫：禁直提 `main`、subject ≤72 字符 | 提交与常规习惯不同 | 功能分支 + heredoc 式消息 |
-| `documents/` 里 `Text File.txt` 已被删除（工作区 ` D`，**未提交**） | 仓库根的状态未定 | 待人工决定：提交删除 or 恢复。`.plan/README.md` 记为"原位保留对照"与事实不符，需随之更正 |
+| `Text File.txt` 与 `.mcp.json` | 仓库根状态曾未定 | **已解决**：用户 commit `5d4fabe` 同时提交了 `.mcp.json` 与 `Text File.txt` 的删除。相关文档引用已同步更正（`Text File.txt` 由 `TritiumSQL.md` 取代，历史可查） |
 
 ## 3.5 vendor 进仓库的外部产物（需登记来源，便于复现与审计）
 
@@ -79,4 +79,4 @@
 
 ---
 
-未读/未验证：Scribe/PlayerState/QuickZone 的审计基于**全仓文本检索**（结论：不存在），未检查网络来源；`Text File.txt` 的删除原因未知（非本次会话所为）；`luau-lsp 1.70.1` 的实际分析结果尚未跑通（缺 `globalTypes.d.luau`，Step 8）。
+未读/未验证：Scribe/PlayerState/QuickZone 的审计基于**全仓文本检索**（结论：不存在），未检查网络来源；`Text File.txt` 的删除原因未知（非本次会话所为，但已随 `5d4fabe` 提交）；`types/globalTypes.None.d.luau` 的**时效性**未跟踪（它是官方从 Roblox API Dump 生成的快照，Roblox 改 API 后会陈旧 —— 更新方式见 §3.5）。
