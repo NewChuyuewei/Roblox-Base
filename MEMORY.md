@@ -47,6 +47,25 @@
 | git 已装守卫：禁直提 `main`、subject ≤72 字符 | 提交与常规习惯不同 | 功能分支 + heredoc 式消息 |
 | `documents/` 里 `Text File.txt` 已被删除（工作区 ` D`，**未提交**） | 仓库根的状态未定 | 待人工决定：提交删除 or 恢复。`.plan/README.md` 记为"原位保留对照"与事实不符，需随之更正 |
 
+## 3.5 vendor 进仓库的外部产物（需登记来源，便于复现与审计）
+
+| 产物 | 来源 | 大小 | sha256（前 16） | 日期 | 为何入库 |
+| --- | --- | --- | --- | --- | --- |
+| `types/globalTypes.None.d.luau` | `https://luau-lsp.pages.dev/type-definitions/globalTypes.None.d.luau`（官方 Cloudflare CDN；`type-definitions/` 会 302 到根路径） | 697,978 B | `bb8572d8b4b24075` | 2026-10-25 | `luau-lsp analyze` 需要 Roblox 全局类型；**入库后 CI 的 types 阶段不联网、可复现**。选 `None` 安全级 = 游戏运行时；`PluginSecurity`/`RobloxScriptSecurity` 含无权调用的 API |
+
+更新方式：从同一 URL 重取 → 重度 `luau-lsp analyze` → 更新本表指纹。该文件是**生成物**（官方由 `dumpRobloxTypes.py` 从 Roblox API Dump 生成），不手改。
+
+> 为什么不从 `raw.githubusercontent.com/JohnnyMorganz/luau-lsp/…` 取：本机对该域直连被 reset，且官方自己说 GitHub 对未认证请求限流严格。
+
+## 3.6 类型检查首次真跑抓到的真 bug（2026-10-25）
+
+`luau-lsp analyze` 第一次能够运行（因为拿到了 §3.5 的定义文件）就抓到一个**运行时必现的缺陷**：
+
+- `Deuterium/Diagnostics/Logging/Debug.luau` 被 `default.project.json` **映射两次**（`ReplicatedStorage.Debug` 与 `…/Logging/Debug`）。在 `ReplicatedStorage.Debug` 那个副本里 `script.Parent` 是 `ReplicatedStorage`，因此它自身的 `require(script.Parent.Logger)` 指向不存在的 `ReplicatedStorage.Logger` —— 而**18 个既有模块 require 的正是这个副本**。
+- 修法：新增 DAL E 垫片 `src/ReplicatedStorage/Debug.luau`（可用绝对路径），真实现只在 Deuterium 树内映射一次。既保留相对 require（I16 与 headless loader 的前提），又不改任何既有调用方。
+
+教训：**同一个源文件被 Rojo 映射两次时，它的 `script.Parent` 相对依赖会指向两个不同的地方**。以后新增顶层映射时先问一句“它的相对 require 还成立吗”。
+
 ## 4. 交付物清单（本会话新增，供后来者定位）
 
 | 路径 | 内容 |

@@ -34,7 +34,7 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1–6 ✅ · **7 ✅** · **9 ✅** / 8,10–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–9 ✅ / 10–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | **70（C1）✅ · 71（C2）✅** | ✅ | — | — |
@@ -57,6 +57,8 @@
 | 2026-10-25 | **Step 71（C2）** | ✅ | 7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/README.md` 索引；分表目标数经三源核实并做自洽校验（53+9+9=71）；偏差 DV-1…DV-5 固化 |
 | 2026-10-25 | **Step 7** | ✅ | `docs/headless.md`：`debug.sethook` 不可用（C4 改源码插桩）；拓扑序 setfenv loader 跑通；**真 SelfTest 8/8，修掉 3 个真 bug** |
 | 2026-10-25 | **Step 9** | ✅ | `AGENTS.md` + `MEMORY.md`；Scribe 审计结论=**本仓库不存在**（与规格声明不符）；运行期外部依赖为零；**D6 关闭** |
+| 2026-10-25 | **Step 8** | ✅ | `.gitlab-ci.yml` 四阶段（本地逐条 exit 0）；`luau-lsp analyze` **首次真跑：TypeError 0**（经 MCP 找到 Cloudflare CDN 取到类型定义并 vendor）；抓到 **1 个真运行时 bug**（Debug 双映射 → 相对 require 指向错处） |
+| 2026-10-25 | **Step 10 前置** | ✅ | 建好 `Configs/Deuterium/{init,FeatureFlags}.luau` + 映射（folder-module 布局，否则 `IsA("ModuleScript")` 或子节点二者必失其一） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
 
 ---
@@ -263,43 +265,35 @@ return {
 > TritiumSQL 的核心（页布局 / B+ 树 / MVCC / 编解码 / 请求预算）**全是纯逻辑**，只有 Port 绑定碰 `game`，所以三级结论都不阻塞 SQL 的 CI 覆盖。
 > 本仓库第一个 CI 可测模块已经是 `Diagnostics/Logging/StructuredLog.luau`（零 require）。
 
-**Step 8 · `.gitlab-ci.yml` 四阶段**
+**Step 8 · `.gitlab-ci.yml` 四阶段** —— ✅ 已完成（2026-10-25）。真实内容见仓库根的 **`.gitlab-ci.yml`**（上面的草稿已废弃）。
 
-```yaml
-stages: [lint, types, build, test]
+**四阶段全部已在本地逐条跑通**（命令与 CI 完全一致）：
 
-default:
-  image: ubuntu:24.04
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq curl unzip git
-    - curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
-    - export PATH="$HOME/.rokit/bin:$PATH"
-    - rokit install
+| 阶段 | 内容 | 本地结果 |
+| --- | --- | --- |
+| `lint` | stylua --check · p0 棘轮 · 门禁 10 · 门禁 10 自检 | exit 0 / 0 / 0 / 0 |
+| `types` | rojo sourcemap + **luau-lsp analyze** | **exit 0 · TypeError 0** |
+| `build` | rojo build + artifact | OK |
+| `test` | `lune run tests/run.luau` | PASS 1 · FAIL 0 · **SKIP 10** |
 
-lint:
-  stage: lint
-  script:
-    - stylua --check Deuterium
-    - selene Deuterium
-    - bash scripts/p0-check.sh
+**解锁阻塞（用 MCP 查到）**：`luau-lsp analyze` 需要 `globalTypes.d.luau`，而 GitHub 直连被 reset。官方文档给出的**Cloudflare CDN**（绕开 GitHub 限流）可用：
+`https://luau-lsp.pages.dev/type-definitions/globalTypes.None.d.luau`（302 到根路径，697,978 B）。已 **vendor 进仓库** `types/globalTypes.None.d.luau`（指纹记在 `MEMORY.md` §3.5）—— types 阶段因此**不联网且可复现**。选 `None` 安全级 = 游戏运行时。
 
-types:
-  stage: types
-  script:
-    - rojo sourcemap default.project.json -o sourcemap.json
-    - luau-lsp analyze --sourcemap=sourcemap.json --defs=types/globalTypes.d.luau Deuterium
+**首次真跑类型检查抓到 5 类问题，其中 1 个是真运行时 bug**：
 
-build:
-  stage: build
-  script: [rojo build default.project.json -o place.rbxlx]
-  artifacts: { paths: [place.rbxlx] }
+| # | 问题 | 性质 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `Debug.luau` 被**双映射**到 `ReplicatedStorage.Debug`；副本的 `script.Parent` 是 `ReplicatedStorage`，于是它自身的 `require(script.Parent.Logger)` **运行时必然失败** —— 而 18 个文件 require 的正是这个副本 | **真运行时 bug** | 新增 DAL E 垫片 `src/ReplicatedStorage/Debug.luau`（允许绝对路径），真实现只在 Deuterium 树里映射一次 |
+| 2 | `os.date("%H:%M:%S")` 违反 Roblox 定义（`os.date` 被声明为只收字面量 `"!*t"` 或 `"*t"`） | 类型定义限制 | 改用 `os.date("*t")` 自拼时分秒 |
+| 3 | 同 2 的变体：`pcall(os.date, "*t")` 里字面量被**放宽成 `string`** | Luau 推断限制 | 包成闭包（闭包内直接调用保住上下文类型） |
+| 4 | `SelfTest` 里 `pcall(StructuredLog.New, "info", …)` 同一机制 | 同上 | 同样包闭包 |
+| 5 | `cert-scope-check.luau` 的 `trim(string.gsub(...))` 多传了一个返回值 | 真小错 | 双括号丢弃第二返回值 |
 
-test:
-  stage: test
-  script: [lune run tests/run.luau]
-```
+另两处属预期：`Configs/Deuterium/FeatureFlags` 缺失（已在 Step 10 前置建好）；`scripts/@lune/*` 是 Lune 宿主专属 require → `scripts/` 不进 analyze 范围（已写进 CI 注释）。
 
-要点：`types/globalTypes.d.luau`（Roblox 全局类型）需**一次性**取得并入库固化（来源在首次跑通时确认，之后不联网）；保留 GitLab 默认 SAST 模板作为额外信号；首次跑通前 `types`/`test` 可先 `allow_failure: true`，Step 12 后全部改回阻断。
+**一条值得记的教训**：同一源文件被 Rojo 映射两次时，它的 `script.Parent` 相对依赖会指向**两个不同地方**。新增顶层映射前先问「它的相对 require 还成立吗」。
+
+判据（已达）：四阶段命令 exit 0；`test` 阶段**如实报告 SKIP 数**（10 个需 Studio 的 SelfTest 不被误计为通过）。
 
 **Step 9 · `AGENTS.md` + `MEMORY.md`** —— ✅ 已完成（2026-10-25）。
 

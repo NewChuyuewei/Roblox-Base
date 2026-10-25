@@ -7,8 +7,9 @@
       "$className": "ReplicatedStorage",
       "Deuterium": { "$path": "Deuterium" },
       "TritiumSQL": { "$path": "TritiumSQL" },
+      "Configs": { "$path": "Configs" },
 
-      "Debug": { "$path": "Deuterium/Diagnostics/Logging/Debug.luau" }
+      "Debug": { "$path": "src/ReplicatedStorage/Debug.luau" }
     },
 
     "ServerScriptService": {

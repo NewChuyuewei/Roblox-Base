@@ -17,10 +17,19 @@ export type Sink = {
 local LogSink = {}
 
 -- Human-readable wall clock for the console default. Never allowed to break logging.
+--
+-- `os.date("%H:%M:%S")` type-errors under the Roblox definitions: they declare os.date as
+-- taking the literal union `"!*t" | "*t"`, not an arbitrary format string (luau-lsp,
+-- 2026-10-25). So we ask for `*t` (a table) and format it ourselves — type-clean, and it
+-- keeps the failure path (pcall) intact.
 local function stamp(): string
-	local ok, text = pcall(os.date, "%H:%M:%S")
-	if ok and type(text) == "string" then
-		return text
+	-- 同样要包成闭包：直接 pcall(os.date, "*t") 时 "*t" 会被放宽成 string，
+	-- 又碰上那个字面量联合类型。闭包里的直接调用才能保住上下文类型。
+	local ok, parts: any = pcall(function()
+		return os.date("*t")
+	end)
+	if ok and type(parts) == "table" then
+		return string.format("%02d:%02d:%02d", parts.hour, parts.min, parts.sec)
 	end
 	return "??:??:??"
 end

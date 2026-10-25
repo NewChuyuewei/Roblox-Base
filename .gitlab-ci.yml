@@ -1,13 +1,73 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/user/application_security/sast/#available-cicd-variables
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure/
-# Dependency Scanning customization: https://docs.gitlab.com/user/application_security/dependency_scanning/dependency_scanning_sbom/#customizing-analyzer-behavior
-# Container Scanning customization: https://docs.gitlab.com/user/application_security/container_scanning/#customizing-analyzer-behavior
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ci/variables/#cicd-variable-precedence
+# CI —— 四阶段，对应用户项目计划的门禁（.plan/README.md §2）
+#
+#   lint  门禁 3（部分）与 5、10：stylua · P0 棘轮 · 认证范围守卫
+#   types 门禁 3：luau-lsp analyze（需 Roblox 类型定义，已 vendor 进仓库）
+#   build 门禁 1：rojo build
+#   test  门禁 2：headless 测试（Lune + 拓扑序 loader，无需 Roblox）
+#
+# 工具链由仓库根的 rokit.toml 固定：rojo 7.7.1 · lune 0.11.1 · stylua 2.6.0 · luau-lsp 1.70.1
+#
+# 已知的网络风险：rokit 的安装脚本与工具下载走 GitHub。若 runner 处于受限网络，
+# 把代理变量配成 CI/CD Variables（HTTPS_PROXY / HTTP_PROXY），或让 runner 预热
+# ~/.rokit 缓存（下面的 cache 已按 rokit.toml 的哈希做键，正常命中时无需下载）。
+
 stages:
-- test
-sast:
+  - lint
+  - types
+  - build
+  - test
+
+default:
+  image: ubuntu:24.04
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq curl unzip git ca-certificates
+    - curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+    - export PATH="$HOME/.rokit/bin:$PATH"
+    - rokit install --no-trust-check
+  cache:
+    key:
+      files:
+        - rokit.toml
+    paths:
+      - .rokit/
+    policy: pull-push
+
+lint:
+  stage: lint
+  script:
+    # 格式化：认证范围内只读（stylua 会改写源码，而源码是受控数据）
+    - stylua --config-path stylua.toml --check Deuterium TritiumSQL scripts
+    # P0 规约棘轮：只允许下降
+    - bash scripts/p0-check.sh
+    # 门禁 10（I16）：认证范围不得触碰引擎/网络/非认证层，且依赖必须在范围内
+    - lune run scripts/cert-scope-check.luau
+    # 门禁必须先证明自己会失败
+    - lune run scripts/cert-scope-check.luau --selftest
+
+types:
+  stage: types
+  script:
+    - rojo sourcemap default.project.json -o sourcemap.json
+    # types/globalTypes.None.d.luau 已随仓库固定在版本控制里（来源见 MEMORY.md），
+    # 所以这一步**不需要联网**，结果可复现。
+    # scripts/ 不在分析范围内：它们是 Lune 宿主脚本，require("@lune/*") 无法被解析。
+    - luau-lsp analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc Deuterium TritiumSQL
+
+build:
+  stage: build
+  script:
+    - rojo build default.project.json -o place.rbxlx
+  artifacts:
+    paths:
+      - place.rbxlx
+    expire_in: 1 week
+
+test:
   stage: test
+  script:
+    # 只跑能在无引擎环境加载的 SelfTest；引擎相关的会被列为 SKIP 并计数（不是通过）
+    - lune run tests/run.luau
+
+# 保留 GitLab 自带的 SAST（免费的额外信号，与上面的门禁不冲突）
 include:
-- template: Security/SAST.gitlab-ci.yml
+  - template: Security/SAST.gitlab-ci.yml

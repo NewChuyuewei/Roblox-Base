@@ -77,8 +77,15 @@ function SelfTest.RunAll(): boolean
 				expect(r.level == "warn" and r.tag == "Dr.X" and r.msg == "boom", "fields preserved")
 				expect(type(r.ts) == "number" and r.ts > 0, "ts defaults to now")
 				expect(table.isfrozen(r), "record frozen")
-				expect(not pcall(StructuredLog.New, "bogus" :: any, "t", "m"), "bad level rejected")
-				expect(not pcall(StructuredLog.New, "info", "" :: any, "m"), "empty tag rejected")
+				-- 包成闭包而不是直接 pcall(fn, args)：直接传参数列表时 Luau 会把 "info" 这类
+				-- 字面量**放宽成 string**（丢掉了调用点的上下文类型），于是报
+				-- “Expected Level, but got string” —— 是推断限制，不是缺陷。
+				expect(not pcall(function()
+					StructuredLog.New("bogus" :: any, "t", "m")
+				end), "bad level rejected")
+				expect(not pcall(function()
+					StructuredLog.New("info", "" :: any, "m")
+				end), "empty tag rejected")
 			end,
 		},
 		{

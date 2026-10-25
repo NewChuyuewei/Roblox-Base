@@ -204,7 +204,7 @@ local function readScope(): { string }
 	local text = fs.readFile(SCOPE_FILE) :: string
 	local out: { string } = {}
 	for _, raw in split(text, "\n") do
-		local line = trim(string.gsub(raw, "#.*$", ""))
+		local line = trim((string.gsub(raw, "#.*$", ""))) -- 双括号：gsub 返回两个值，丢掉第二个
 		if line ~= "" then
 			table.insert(out, line)
 		end

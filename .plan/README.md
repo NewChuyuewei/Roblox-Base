@@ -146,6 +146,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v9** | **Step 8 完成**：`.gitlab-ci.yml` 四阶段（本地逐条 exit 0）· `tests/run.luau` + `scripts/lune-loader.luau`（headless 测试入口，如实报告 SKIP）· 经 MCP 找到 `luau-lsp.pages.dev` CDN → **vendor** `types/globalTypes.None.d.luau`（指纹入 `MEMORY.md`）→ **首次真跑类型检查：TypeError 0**，并抓到 **1 个真运行时 bug**（`Debug.luau` 双映射导致副本的相对 `require` 指向 `ReplicatedStorage.Logger`）+ 门禁 3 首次全绿 · 新建设 `src/ReplicatedStorage/Debug.luau` 垫片与 `Configs/Deuterium/` 树 |
 | **v8** | **Step 7 + Step 9 完成**：`docs/headless.md`（headless 能力基线）· `AGENTS.md` · `MEMORY.md`。**两条原假设被实测推翻**（`debug.sethook` 不存在 → C4 改**源码插桩**；`_G` 不是全局表 → env 必须显式拷标准库）；拓扑序 `setfenv` loader 跑通，**真 SelfTest 8/8**，并当场修掉 **3 个真 bug**（Logger 冒号调用漏 self）。Scribe 审计结论=**本仓库不存在**（D6 关闭），运行期外部依赖为零。新增风险 R21 |
 | **v7** | **C2 完成**：7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/` 索引。**目标关闭表按 Annex A 分表建立并带自洽校验**（明示的 8 表相加 = 53；A-5=9†、A-7=9† 则合计 = 71，与三源一致的 DAL A 总数吻合）。新增 `TYPES.md`（DO-178C §6.7/6.7.1 对动态语言的要求）→ 顺带暴露 `BIGINT` 的 2^53 降级未写明，已在 `TritiumSQL.md` 补上 |
 | **v6** | **C1 完成 + 门禁 10 交付**：裁定合规目标（D10）；危害 H1–H7→DAL 固化并逐模块映射；**12k 预算重切**（原表自身超帽子 400 行 → 11,200 + 800 余量）；`ErrorHandler` 按 I16 净化（删 `Report`，零调用方）；`cert-scope-check` 以 Lune 重写并带自检 —— **发现它只查字面、漏依赖闭包** → 补 B 段，并修正 `script.Parent` 语义（N 个 Parent 只向上 N−1 层） |
