@@ -166,7 +166,7 @@ Page = { pageId, tableId, partition,
 
 ### 6.2 类型与语义
 
-`INT`/`BIGINT`（number，精度边界需显式断言）· `FLOAT` · `NUMERIC(p,s)`（整数+标度模拟）· `VARCHAR(n)`（超长**报错**，不静默截断）· `TEXT`（超长分块）· `BOOLEAN` · `TIMESTAMP` · `DATE` · `UUID` · `JSON` · `ARRAY<T>` · `ENUM`。
+`INT`（`±2^31`）· **`BIGINT`（`±2^53`，不是 2^63 —— Luau 装不下 64 位精确整数，这是对 SQL 语义的已知降级，必须在文档与错误信息里说明）** · `FLOAT` · `NUMERIC(p,s)`（整数+标度模拟，`p-s ≤ 15`）· `VARCHAR(n)`（超长**报错**，不静默截断）· `TEXT`（超长分块）· `BOOLEAN` · `TIMESTAMP` · `DATE` · `UUID` · `JSON` · `ARRAY<T>` · `ENUM`。
 
 **NULL 三值逻辑**必须显式实现并单测：`AND`/`OR`/`NOT` 真值表、`IS NULL`、`IS DISTINCT FROM`。**转换矩阵**（T14）三级：implicit / assignment / explicit。
 
