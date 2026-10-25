@@ -3,7 +3,8 @@
 > **来源**：重写自 `Text File.txt`（原代号 VoxDB / VQL，已废弃）
 > **命名**：产品 **TritiumSQL** · 模块前缀 `Tri.*`（对齐 `Dr.*`）· 方言 **TriSQL** · 键前缀 `tri:` · 发布包 `vospek/tritiumsql`
 > **定位**：在 `DataStoreService`（本质 KV）之上，做关系型严谨性 + NoSQL 灵活性 + B+ 树索引 + 企业级扩展。
-> **权威划分**：物理天花板与功能面 → `SCALE.md` §1.3 / §5；规模预算 → `SCALE.md` §2；与 Deuterium 的互通 → `INTEGRATION.md`；执行步骤 → `STEPS.md` Step 30–47 / 60–65。
+> **权威划分**：物理天花板与功能面 → `SCALE.md` §1.3 / §5；规模预算 → `SCALE.md` §2；与 Deuterium 的互通 → `INTEGRATION.md`；执行步骤 → `STEPS.md` Step 30–47 / 60–65；**DAL 与认证约束 → `CERT.md`**。
+> ⚠ `CERT.md` 限制了本项目的规模与次序：认证线 ≤12k 行、先 HLR/LLR 再写码、C1–C6 先于 `T0`。
 > Wave ID 统一为 `T<phase>`。
 
 ---
@@ -44,6 +45,16 @@ Tri.NoSql/       JsonPath · FunctionIndex · TimeSeries · GraphEdge
 Tri.Integration/ （14 模块，见 INTEGRATION.md §5.2）
 Tri.Testing/     SimulatorPort · PortContract · Fixtures · RequestAssert
 ```
+
+### DAL 归属（DO-178C，见 `.plan/CERT.md`）
+
+| 组 | DAL | 说明 |
+| --- | --- | --- |
+| `Tri.Txn` · `Tri.Wal` · `Tri.Storage` · `Tri.Index` · `Tri.Query` · `Tri.Request` · `Tri.Catalog` · `Tri.Types` | **C** | 落进认证范围（≤12k 行硬上限）；H1/H2/H4/H5/H6 |
+| `Tri.Runtime/`（端口与三绑定） | **E** | 碰 `game` 与网络，不可鉴定（`CERT.md` §4.1） |
+| `Tri.Testing.SimulatorPort` | **（范围内）** | 它不是被测软件，是**认证信用所依赖的确定性底座**（`CERT.md` §4.3） |
+| `Tri.Integration/` | **E** | 与框架互通，出范围 |
+| `Tri.NoSql` · `Tri.Ddl` · `Tri.Stat` | **D/E** | 未列入首批认证范围；若纳入必须先做范围变更（`CERT.md` §3.1） |
 
 ---
 

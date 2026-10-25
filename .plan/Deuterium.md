@@ -1,7 +1,8 @@
 # Deuterium — 实施计划
 
 > **规格基线**：`../Deuterium/Deuterium.md`（不重写，按本文档 §2 的清单打补丁）
-> **权威划分**：不变量/门禁/决策/风险 → `README.md`；规模与预算 → `SCALE.md`；执行步骤 → `STEPS.md`；与 SQL 的互通 → `INTEGRATION.md`。
+> **权威划分**：不变量/门禁/决策/风险 → `README.md`；规模与预算 → `SCALE.md`；执行步骤 → `STEPS.md`；与 SQL 的互通 → `INTEGRATION.md`；**DAL 与认证约束 → `CERT.md`**。
+> ⚠ 在 DO-178C 下，本项目的框架**只有纯底座进入认证范围**（`Core/Foundation` + `Types` + `Collections` + `Memory` + `Concurrency`，约 1,400 行）；`Runtime`/`Net`/`Security`/`Diagnostics`/`ECS`/`World` 全部是 **DAL E、出范围**且不得被认证核心 require（I16）。
 > Wave ID 统一为 `D<phase>.<wave>`。
 
 ---
@@ -68,6 +69,8 @@
 | `D1.5` | `Dr.Core.Lifecycle`（Lifecycle/ModuleLoader/Configuration/BootSequencer/HotReload/ShutdownManager） | 7 | ✅ 未验证（缺 `Dr.Core.Foundation` 三件 → `D0.2`） |
 | `D1.6` | `Dr.Core.Reflection` + `Dr.Types.Contract` | 4 + 3 | ✅ 未验证 |
 | `D1.7` | `Dr.Testing`（Runner/Suite/Assert/TestContext）+ `Extensions.Demo` | 5 + 1 | ✅ 未验证 |
+
+**DAL 归属（`CERT.md` §3）**：`D1.*`/`D2.2–2.4` 已完成的全部内容均为 **DAL E、认证范围外**，冻结；它们**不得被认证核心 require**（I16 守卫）。`Core/Foundation` 与 `Types` 被核心依赖，因此必须以 **PDS 式反补 HLR/LLR** 后纳入范围（`CERT.md` §9.2，约 0.5k 行）—— 这是晚开工的诚实成本。
 
 > 「未验证」= 文件与 SelfTest 齐备，但未在任何环境跑通。`STEPS.md` Step 10 之后本列全部转 ✅。
 
