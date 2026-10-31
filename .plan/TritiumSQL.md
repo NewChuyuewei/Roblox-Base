@@ -245,7 +245,7 @@ SELECT * FROM events WHERE payload->>'type' = 'kill' AND payload->'meta'->>'weap
 | --- | --- | --- |
 | **`T0`** | `Tri.Runtime.StorePort` + 三绑定 · `NamespaceCodec` · `Catalog` · `SchemaStore` · `Sequence` · Codec 走 I9 | `AC-T0`：round-trip 1000 随机例唯一；任意输入 key ≤50 字符恒成立；三绑定跑同一 `PortContract` 结果一致；冷启动读请求数 == 表数（断言） |
 | **`T0.5`** | **端到端纵切**（内存版全链，与 `D0.5` 同一次） | `AC-T0.5`：`CREATE TABLE` → `INSERT` → 主键 `SELECT` 全链跑通；产出 `SEAMS.md` |
-| **`T1`** | `RequestBudget`（三态 + 显式设限）· `RequestQueue`/`TokenBucket`/`BatchExecutor` · `Page`/`HeapLayout` · `PageManager` · `PageCache` · CRUD | `AC-T1`：速率 10/min 灌 100 次 → 0 丢弃、排队、计数精确；P0 严格早于 P3（时间戳）；4KB 页 ≥32 典型行；分裂后两页 ≥40%；写 100 页请求数 ==100；命中缓存 **0 次读**；点查未命中 ≤1 次读 |
+| **`T1`** | `RequestBudget`（三态 + 显式设限）· `RequestQueue`/`TokenBucket`/`BatchExecutor` · `Page`/`HeapLayout` · `PageManager` · `PageCache` · CRUD | `AC-T1`：速率 10/min 灌 100 次 → 0 丢弃、排队、计数精确；P0 严格早于 P3（时间戳）；4KB 页 ≥32 典型行；分裂后两页 ≥40%；写 100 页请求数 ==100；命中缓存 **0 次读**；点查未命中 ≤1 次读；**页容量改为按字节断言（数据 ≤ 4096 − 头部），不只按槽位数（纵切 F1 修正）**；**端口写失败必须回滚内存态（纵切 F2 新增验收）** |
 | **`T2`** | `NodeCodec` · `BPlusTree`（主键/聚簇）· `IndexScan` · `UniqueGuard` | `AC-T2`：1e4 行点查**实际读次数 ≤ 树高**；分裂后父子键区间无空洞；范围扫描不产生回父节点读；唯一键并发插只有一个成功 |
 | **`T3`** | 事务 · 隔离级别 · SAVEPOINT · MVCC · 锁管理器 · 等待图 · WAL · Checkpoint · 崩溃恢复 · **SQLSTATE 错误码** | `AC-T3`：20 个 WAL 注入点的恢复状态 == 最后一次 COMMIT；2.5k 步环形等待在 ≤2× 链路长度内发现并回滚代价最小者；隔离级别矩阵逐格断言；`AC-G3` 的 Saga 逆序回滚 |
 | **`T4`** | Lexer/Parser/Analyzer · 逻辑/物理计划 · 核心算子 · 类型系统 · **三值逻辑** · 转换矩阵 · PreparedStatement + 计划缓存 | `AC-T4`：Parser 负例集 100% 拒绝并报位置；`Compile` 后热路径执行 1000 次**零新增分配/零解析**；三值逻辑真值表逐格断言 |

@@ -34,9 +34,9 @@
 | Step | 状态 | Step | 状态 | Step | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | S1 ✅ S2 ☐ S3 ✅ | ◐ | 20 | ☐ | 44–47 | ☐ |
-| 1–9 ✅ / 10–12 ☐ | ◐ | 21 | ☐ | 50–57 | ☐ |
+| 1–12 ✅ | ✅ | 21 | ☐ | 50–57 | ☐ |
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
-| 16 / **16.5** | ☐ | 36–43 | ☐ | — | — |
+| 16 ☐ / **16.5 ✅** | ◐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | **70（C1）✅ · 71（C2）✅** | ✅ | — | — |
 | — | — | **72–75（C3–C6）** | ☐ | — | — |
 
@@ -57,6 +57,10 @@
 | 2026-10-25 | **Step 71（C2）** | ✅ | 7 份认证文档（PSAC/SDP/SVP/SCMP/SQAP/REQ-STD/TYPES）+ `docs/cert/README.md` 索引；分表目标数经三源核实并做自洽校验（53+9+9=71）；偏差 DV-1…DV-5 固化 |
 | 2026-10-25 | **Step 7** | ✅ | `docs/headless.md`：`debug.sethook` 不可用（C4 改源码插桩）；拓扑序 setfenv loader 跑通；**真 SelfTest 8/8，修掉 3 个真 bug** |
 | 2026-10-25 | **Step 9** | ✅ | `AGENTS.md` + `MEMORY.md`；Scribe 审计结论=**本仓库不存在**（与规格声明不符）；运行期外部依赖为零；**D6 关闭** |
+| 2026-10-25 | **Step 10** | ✅ | 前提修正为 headless：10/10 SelfTest 的 `RunAll()` 在 Lune 里执行且通过 |
+| 2026-10-25 | **Step 11** | ✅ | 判据过时：18 处已由 codemod 变为相对 require（17 + 1 带 WaitForChild），均不碰 game |
+| 2026-10-25 | **Step 16.5** | ✅ | 纵切 36/36 断言；Spike 4 文件 + `tests/walkthrough.luau` + `.plan/SEAMS.md`；暴露 6 接口 / 4 证伪 / D12·D13 |
+| 2026-10-25 | **Step 12** | ✅ | 四件套全绿 + tag `v0.1.0-alpha`（D0.1 收口） |
 | 2026-10-25 | **Step 8** | ✅ | `.gitlab-ci.yml` 四阶段（本地逐条 exit 0）；`luau-lsp analyze` **首次真跑：TypeError 0**（经 MCP 找到 Cloudflare CDN 取到类型定义并 vendor）；抓到 **1 个真运行时 bug**（Debug 双映射 → 相对 require 指向错处） |
 | 2026-10-25 | **Step 10 前置** | ✅ | 建好 `Configs/Deuterium/{init,FeatureFlags}.luau` + 映射（folder-module 布局，否则 `IsA("ModuleScript")` 或子节点二者必失其一） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
@@ -303,7 +307,11 @@ return {
 **Scribe 审计的实测结论（与规格声明不符，必须记下）**：`Deuterium.md` §3 称「Scribe 已内置 `Libraries/Scribe`，⚠️ 待审计」，但**本仓库没有 `Libraries/` 目录，全仓 `grep Scribe` 命中 0 处**。→ 不存在则无可审计，无需五步流程；将来真正引入时再走。**运行期外部依赖目前为零**（Scribe/PlayerState/QuickZone 均无引用）。
 判据：达成 —— 三行已填（含实测结论）；**决策 D6 关闭**。
 
-**Step 10 · 全仓库 require 冒烟**（Studio 命令栏）
+**Step 10 · 全仓库 require 冒烟** —— ✅ 已完成（2026-10-25）。
+
+**前提已修正**：原计划写「Studio 命令栏手工跑」，但仓库现在有 headless harness —— **10 个 SelfTest 的 `RunAll()` 全部在 Lune 里执行且通过**（含 `Testing/SelfTest` 这个聚合入口）。所以这一条进 CI（`tests/run.luau` 的引擎套件），不再依赖人工点 Studio。证据：全量套件 **PASS 10 · FAIL 0 · SKIP 0**，其中 `实际执行 10/10 · 通过 10`。
+
+原文留档：**Step 10 · 全仓库 require 冒烟**（Studio 命令栏）
 
 **前置缺口（Step 3 侦察发现，必须先补）**：`Testing/SelfTest.RunAll()` 会调 `Configuration.Load()` 与 `FeatureFlags.LoadFromConfig()`，而两者都要求
 `ReplicatedStorage.Configs.Deuterium`（一个 ModuleScript 清单）+ `Configs/Deuterium/FeatureFlags`（返回 flag 定义数组）——**这棵 `Configs/` 树目前既不存在也没映射**。需补：
@@ -325,9 +333,15 @@ print(ok, err)
 
 判据：返回 true。**不过就不许继续** —— 它证明 `D1.*`/`D2.2–2.4` 的模块真能加载，而不只是文件存在（风险 R1）。完成后 `Deuterium.md` 里「未验证」全部转 ✅。
 
-**Step 11 · `Debug` 全量替换登记**：`grep -rl 'WaitForChild("Debug")' Deuterium | wc -l` 应等于 **18**。不改写这些文件（现路径已可用），只在 `AGENTS.md` 记：新代码一律 `require(ReplicatedStorage.Debug)`（不 `WaitForChild`），旧文件在各自被改动时顺手去掉。
+**Step 11 · `Debug` 全量替换登记** —— ✅ 已完成（2026-10-25）。
 
-**Step 12 · `D0.1` 收口**：`rojo build` + `lune run tests/run.luau` + `p0-check.sh`。
+**判据已过时**：pass 1 的 codemod 把 18 处遗留调用改成了**相对 require** —— 实测现在是 **17 个文件用 `…Parent.Debug` 相对路径 + 1 个（`Runtime/Interop/SelfTest`）保留 `:WaitForChild("Debug")`**，两者指向同一个 `Debug` 节点，且**都不再碰 game**（这正是它们能被 headless 装载的原因）。规则已落在 `AGENTS.md`：新代码一律 `require(ReplicatedStorage.Debug)`，旧文件在被改动时顺手去掉 WaitForChild。
+
+原文留档：**Step 11 · `Debug` 全量替换登记**：`grep -rl 'WaitForChild("Debug")' Deuterium | wc -l` 应等于 **18**。不改写这些文件（现路径已可用），只在 `AGENTS.md` 记：新代码一律 `require(ReplicatedStorage.Debug)`（不 `WaitForChild`），旧文件在各自被改动时顺手去掉。
+
+**Step 12 · `D0.1` 收口** —— ✅ 已完成（2026-10-25）。四件套全绿 + tag `v0.1.0-alpha`。
+
+原文留档：**Step 12 · `D0.1` 收口**：`rojo build` + `lune run tests/run.luau` + `p0-check.sh`。
 判据：`AC-D0.1` —— CI 四阶段全绿（含 `test`，不再是 `allow_failure`）。打 tag `v0.1.0-alpha`。
 
 ---
@@ -403,7 +417,19 @@ Step 13+      D0.2 / D0.3 起（认证范围内的模块，此后每件先有 LL
 **Step 16 · `D0.4` `Dr.Runtime.Platform` 端口**：`DataStoreProxy.luau` · `MemoryStoreProxy.luau`（请求计数 + 配额节流 + 故障注入）。
 判据：`AC-D0.4` —— `grep -rn 'GetService("DataStoreService")' Deuterium` 只命中这两个文件；代理与模拟器互换后上层测试无需改动。
 
-**Step 16.5 · `D0.5` + `T0.5` 端到端纵切 —— 在写任何横向模块之前做**
+**Step 16.5 · `D0.5` + `T0.5` 端到端纵切** —— ✅ 已完成（2026-10-25）。
+
+| 产物 | 说明 |
+| --- | --- |
+| `TritiumSQL/Tri/Spike/{SpikePort,SpikeStore,TriSQL,Walkthrough}.luau` | 内存版全链（DAL E、非认证范围、**零引擎依赖**） |
+| `tests/walkthrough.luau` + `tests/run.luau` 同名套件 | 两个入口；**36/36 断言通过**，进 CI |
+| `.plan/SEAMS.md` | 接缝清单：**6 条需正式化的接口 · 4 条被证伪的设想 · 2 个待拍板决策（D12/D13）** |
+
+关键结果：Port 形状够用 · 请求次数可计量（INSERT = **2** 次端口请求）· I11 可断言 · **跨项目依赖 Tri→Dr.FOUNDATION 在 Rojo 与 headless 下都成立** · 点查不退化成全扫 · 键长 50 可达。
+
+**它改动了两处规约**（已回写 `TritiumSQL.md` 的 `AC-T1`）：页容量改为**按字节**断言（F1）；新增「端口写失败必须回滚内存态」（F2）。
+
+原文（链路定义）：
 
 新建 `tests/walkthrough.luau`，按序打穿：
 

@@ -83,6 +83,8 @@
 | D2 | PlayerState 是否仍必要 | 保留 / 全改走 TritiumSQL | **取消**：Scribe 自带 `Internal/Store/ProfileStore` 且就是玩家数据载体 → PlayerState 的存在理由消失 | **CLOSED（取消）** | — |
 | D2-bis | PlayerState 是否被 Scribe 顶替 | — | **是**：`Dr.Data.Store.PlayerData` / `Dr.State.Sync.Replicator` 由 Scribe 承担（经适配器）；我们只保留 Saga 协调与与 TritiumSQL 的桥 | **CLOSED** | — |
 | D9 | 集成层事件机制 | 直接回调 / `Dr.Signal` 广播 | 待 `Dr.Signal`（D2.0）落地后定；默认先回调（依赖更少、更快），Signal 作为可选广播 | **OPEN** | Step 54/57 |
+| **D12** | **TritiumSQL 的发布依赖** | ① 依赖 Deuterium FOUNDATION ② 自带错误类型 | 纵切证实 Tri→Dr.FOUNDATION 可行；倾向 ①（少一份错误实现） | **OPEN** | T3 之前 |
+| **D13** | **SQL 错误的最终形状** | ① 扩 `DrError`（动认证范围）② Tri 侧 `SqlError` 包一层 | 倾向 ②（不动认证范围的 `CoreTypes`） | **OPEN** | T3 之前 |
 | D10 | 合规目标定性 | 适航级全合规 / 航空级可靠性工程 | **可审查的航空级可靠性工程，保留 DO-178C 目标结构与升级路径**（理由与四项裁剪：`docs/cert/HAZARD.md` §1）。升级为全合规是**加法**而非重写 | **DECIDED** | — |
 
 ## 4. 关键路径
@@ -99,6 +101,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
     ├──▶ D3.1/3.2 HA┴─┐
     └──▶ T0–T2 引擎 ──┴──▶ T3 事务/WAL ──▶ T4/T5 查询 ──▶ G1–G3 集成 ──▶ G4/G5 ──▶ D4 会话态 ──▶ T9/T10 + D7 发布
 ```
+> **注（纵切后修正）**：`C3–C6`（认证线的需求基线 / 覆盖 / 工具鉴定 / 配置管理）横在 **Step 16.5 之后、Step 13+ 之前** —— 因为 `D0.2/D0.3` 的产物落在认证范围内，I18 要求先有 LLR。原图漏了这一段，两处文档不一致已在此处对齐。
 
 ## 5. 进度登记
 
@@ -163,6 +166,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v15** | **Phase 0.5 端到端纵切（Step 16.5）交付**：内存版全链（Port→页→索引→TriSQL 编译/执行→读回）**36/36 断言通过**，两个入口（`lune run tests/walkthrough.luau` 与 CI 套件），产物含 `.plan/SEAMS.md`。**它改动了两处规约**：T1 的页容量验收改为**按字节**（原来只有槽位）、新增「端口写失败必须回滚内存态」。另收口 Step 10–12（Step 10 的前提由「Studio 手工」改为 headless；Step 11 的 18 处判据已被 codemod 取代）。新增决策 **D12/D13**（TritiumSQL 的发布依赖 / SQL 错误形状），须在 T3 之前拍板 |
 | **v14** | **变异测试补洞**（`code-review-and-quality` skill 的 Step 2 要求“用实验而非阅读回答测试是否有效”）：对本批 8 处修复逐个做反向变异 → **4 处未被任何测试抓住**（=缺失用例）。已补 3 处：`ProtocolBuffer` 条件冻结、`ShutdownManager` 逆序停、`ModuleLoader` 的 `.selftest` 后缀排除（新增套件，含 Kernel 三个 provider 的启停顺序断言）；**第 4 处（`MockBridge.Reset` 清 listeners）如实标注为“内存卫生修复，公开 API 无法观测”**，未编造测试。补洞后重跑变异：三处均**已被抓住**。另：把“不加引擎桩装载数”从打印改成**断言**（R29 的哨兵以前不会响），并用负例证明它会拦 |
 
 | **v13** | **全量代码优化（Skills + MCP + SubAgents，三批提交）**：5 个只读子代理并行审计全部 79 个第一方文件 → **2 个 blocker + 13 个 major + 一批 minor 已修**（TestKit 永远无法注册用例 / Compressor 拒收自己的输出 / ShutdownManager 正序停与生产必抛 / FeatureFlags 非幂等 / ServerRegistry 降级承诺未兑现 …）；`code-simplification` skill 走流程；context7 MCP 核实 4 条承重语义（`typeof(nil)` / `type` vs `typeof` / `table.freeze` 非幂等 / `os.date` 字面量联合）。**结构性成果**：第一方 **75/75 模块可 headless 装载**（起点 15）、**10/10 引擎绑定 SelfTest 由 SKIP 变为执行且通过**、`tests/run.luau` **PASS 8 · FAIL 0 · SKIP 0**（59 用例）。新增 `scripts/rbx-stub.luau`；修掉 3 个由“可执行性”暴露的产品缺陷（`Configuration.Load` 冻结已冻结表 / `ProtocolBuffer` 同类 / `TestContext.note` 的 `$`）。新增风险 R27–R29 |
