@@ -4,7 +4,7 @@
 -- is a runtime contract violation (fail fast with a named error).
 
 local Channel = require(script.Parent.Parent.Core.Channel)
-local Types = require(game:GetService("ReplicatedStorage").Deuterium.Core.Container.Types)
+local Types = require(script.Parent.Parent.Parent.Core.Container.Types)
 
 local ServerBridge = {}
 

@@ -5,7 +5,7 @@
 -- (constant-time compare), then ReplayGuard window/nonce consumption — a failed
 -- signature does not burn a nonce slot.
 
-local Hmac = require(game:GetService("ReplicatedStorage").Deuterium.Security.Crypto.Hmac)
+local Hmac = require(script.Parent.Parent.Parent.Security.Crypto.Hmac)
 local ReplayGuard = require(script.Parent.ReplayGuard)
 
 local RequestSigner = {}

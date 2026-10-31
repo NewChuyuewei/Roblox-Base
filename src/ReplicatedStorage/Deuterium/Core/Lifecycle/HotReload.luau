@@ -5,7 +5,7 @@
 -- Known limit: watches DescendantAdded only — NEW modules trigger reload; source edits
 -- of existing scripts do not (full source-swap reload is backlog).
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 local Contract = require(script.Parent.Parent.Foundation.Contract)
 
 local HotReload = {}

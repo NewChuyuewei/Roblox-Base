@@ -6,7 +6,7 @@
 -- decision; the handle shape is final, so the swap stays internal.
 
 local NetworkManager = require(script.Parent.NetworkManager)
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 
 local UnreliableChannel = {}
 

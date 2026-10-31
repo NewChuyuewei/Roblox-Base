@@ -24,7 +24,17 @@ function ServerBrowser.ListServers(): { ServerEntry }
 		return { { jobId = ServerRegistry.GetJobId(), startedAt = os.time() } }
 	end
 	local memoryStore = ServiceLocator.Get("MemoryStoreService") :: MemoryStoreService
-	local sortedMap = memoryStore:GetSortedMap(REGISTRY_MAP)
+	-- 同上：获取 sortedMap 也要 pcall 包裹，否则服务故障会抛出而非降级为空列表。
+	-- 写成“先声明为 any 再赋值”：若用 `local ok, map = pcall(...)`，Luau 会把 map 推断为
+	-- MemoryStoreSortedMap（非空），于是 `map == nil` 在 --!strict 下报
+	-- “MemoryStoreSortedMap and nil cannot be compared”。
+	local sortedMap: any = nil
+	local okMap = pcall(function()
+		sortedMap = memoryStore:GetSortedMap(REGISTRY_MAP)
+	end)
+	if not okMap or sortedMap == nil then
+		return {}
+	end
 	local ok, items = pcall(function()
 		return sortedMap:GetRangeAsync(Enum.SortDirection.Ascending, 100)
 	end)

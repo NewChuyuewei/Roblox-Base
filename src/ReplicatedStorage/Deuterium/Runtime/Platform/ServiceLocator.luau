@@ -15,7 +15,10 @@ local function get(name: string): Instance
 	if cached ~= nil then
 		return cached
 	end
-	-- Cold path: the only place game:GetService is called in the whole framework.
+	-- Cold path: **本应是**全框架唯一的 game:GetService 入口（I10）。
+	-- 事实上不是：RunContext / FeatureFlags / Core.Lifecycle.Configuration 等仍有直接调用
+	-- （部分已在 2026-10-25 的清理中改为相对路径）。这里如实措辞，避免注释把 I10 的
+	-- 偏离掩盖成“已经收敛”。
 	local service = game:GetService(name)
 	_cache[name] = service
 	return service

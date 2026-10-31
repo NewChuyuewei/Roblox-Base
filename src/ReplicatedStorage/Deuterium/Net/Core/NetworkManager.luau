@@ -4,8 +4,8 @@
 -- Policy: channels are declared ONCE (Construct-time). Runtime "channel not found" is fatal,
 -- never silent — a misspelled channel is a programming error, not a network condition.
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
-local ServiceLocator = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Platform.ServiceLocator)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
+local ServiceLocator = require(script.Parent.Parent.Parent.Runtime.Platform.ServiceLocator)
 
 local ReplicatedStorage = ServiceLocator.Get("ReplicatedStorage")
 

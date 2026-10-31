@@ -4,7 +4,7 @@
 -- = fatal programming error with the schema name in the message.
 
 local Serializer = require(script.Parent.Serializer)
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local ProtocolBuffer = {}
 
@@ -28,7 +28,9 @@ function ProtocolBuffer.Define(schema: Serializer.Schema): ()
 		assert(not seen[field.name], `[Dr.ProtocolBuffer] duplicate field {field.name} in {schema.name}`)
 		seen[field.name] = true
 	end
-	_schemas[schema.name] = table.freeze(schema)
+	-- 同 Configuration.luau 的坑：官方 Luau 语义下 table.freeze 对**已冻结**的表会抛错。
+	-- schema 是调用方传进来的（边界输入），必须容许已冻结（I17：先验后用）。
+	_schemas[schema.name] = if table.isfrozen(schema) then schema else table.freeze(schema)
 end
 
 function ProtocolBuffer.Lock(): ()

@@ -7,7 +7,7 @@
 -- After Init, dependencies sit resolved and frozen on each context — the runtime hot
 -- path never performs a name lookup again.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
 
 local Types = require(script.Parent.Types)
 local ServiceRegistry = require(script.Parent.ServiceRegistry)
@@ -159,7 +159,7 @@ end
 
 -- Test-only escape hatch (SelfTest). Studio-only by contract — production can never wipe the kernel.
 function Kernel.Reset(): ()
-	local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+	local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 	assert(RunContext.IsStudio(), "[Dr.Kernel] Reset is Studio-only")
 	ServiceRegistry.Reset()
 	ServiceContainer.Reset()

@@ -4,7 +4,7 @@
 -- Lock compiles the chain into a flat frozen array — runtime dispatch is a numeric
 -- loop over pre-bound functions, no string lookup, no per-call table construction.
 
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 export type Handler = (payload: any) -> boolean -- false = halt chain
 

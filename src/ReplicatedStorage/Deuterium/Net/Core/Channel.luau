@@ -7,7 +7,7 @@
 
 local NetworkManager = require(script.Parent.NetworkManager)
 local ConnectionPool = require(script.Parent.ConnectionPool)
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 
 local Channel = {}
 

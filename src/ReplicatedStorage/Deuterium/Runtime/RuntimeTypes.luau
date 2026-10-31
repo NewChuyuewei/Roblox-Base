@@ -17,12 +17,6 @@ export type FeatureFlagDef = {
 	studioOverride: boolean?, -- forced value while running inside Studio
 }
 
-export type FeatureFlagConfigEntry = {
-	name: string,
-	default: boolean,
-	studioOverride: boolean?,
-}
-
 -- Opaque self-handle for Platform.InstanceTracker: never reach into it,
 -- pass it back to Release. The tracked instance is retrievable for diagnostics.
 export type TrackHandle = {

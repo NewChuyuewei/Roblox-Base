@@ -3,10 +3,10 @@
 -- middleware compiled order, queue overflow caps. Command bar:
 --   require(game.ReplicatedStorage.Deuterium.Net.Processing.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 local Serializer = require(script.Parent.Serializer)
 local Packet = require(script.Parent.Packet)
 local Compressor = require(script.Parent.Compressor)
@@ -134,8 +134,13 @@ function SelfTest.RunAll(): boolean
 				expect(chain.Size() == 2, "two handlers")
 				expect(chain.Run("go"), "pass path")
 				expect(not chain.Run("stop"), "halt path")
-				expect(hits[1] == "halted", "halt ran before 'last' (order 100 < 300)")
-				expect(hits[2] == nil, "chain halted before last")
+				-- 断言**实际发生过的顺序**：Run("go") 只让 order 300 推入 "last"；
+				-- 再 Run("stop") 时 order 100 先推 "halted" 并中断。
+				-- 旧写法断言 hits[1] == "halted"，但 hits[1] 来自上一次 "go"，所以恒为 FAIL，
+				-- RunAll() 永远回不了 true（独立复审 subagent, net lane 2026-10-25 报出）。
+				expect(hits[1] == "last", "'last' ran on the pass path")
+				expect(hits[2] == "halted", "'halted' ran on the halt path after 'last'")
+				expect(#hits == 2, "chain halted before 'last' ran again")
 			end,
 		},
 		{

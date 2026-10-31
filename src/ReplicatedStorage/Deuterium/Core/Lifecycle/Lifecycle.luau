@@ -23,12 +23,8 @@ function Lifecycle.IsBefore(a: Phase, b: Phase): boolean
 end
 
 function Lifecycle.IsKnown(phase: string): boolean
-	for _, p in ORDER do
-		if p == phase then
-			return true
-		end
-	end
-	return false
+	-- table.find 就在上面几个函数里用过；手写循环是重复实现（subagent core lane）。
+	return table.find(ORDER, phase) ~= nil
 end
 
 return table.freeze(Lifecycle)

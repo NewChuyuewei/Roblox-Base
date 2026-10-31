@@ -2,13 +2,13 @@
 -- Dr.Testing.SelfTest — TestKit self-acceptance + full W1.x chain end-to-end.
 -- Command bar: require(game.ReplicatedStorage.Deuterium.Testing.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Debug)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
-local FeatureFlags = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.FeatureFlags)
-local Kernel = require(game:GetService("ReplicatedStorage").Deuterium.Core.Container.Kernel)
-local Configuration = require(game:GetService("ReplicatedStorage").Deuterium.Core.Lifecycle.Configuration)
-local Demo = require(game:GetService("ReplicatedStorage").Deuterium.Extensions.Demo)
+local RunContext = require(script.Parent.Parent.Runtime.Environment.RunContext)
+local FeatureFlags = require(script.Parent.Parent.Runtime.Environment.FeatureFlags)
+local Kernel = require(script.Parent.Parent.Core.Container.Kernel)
+local Configuration = require(script.Parent.Parent.Core.Lifecycle.Configuration)
+local Demo = require(script.Parent.Parent.Extensions.Demo)
 
 local Suite = require(script.Parent.TestSuite)
 local TestRunner = require(script.Parent.TestRunner)
@@ -30,7 +30,11 @@ function SelfTest.RunAll(): boolean
 			end, "DR.TEST", "assert raises DrError")
 		end)
 		t.Test("equal works on frozen tables", function()
-			Assert.Equal(table.freeze({ a = 1 }), table.freeze({ a = 1 }), "identity isn't the ask here")
+			-- Assert.Equal 是**同一性**比较（`~=`），所以两个各自构造的冻结表本来就不相等 ——
+			-- 旧写法永远会抛，“等值”这个意图从未被验证过。改为共享同一个引用：
+			-- 真正要证的是“冻结不影响同一性比较”。
+			local shared = table.freeze({ a = 1 })
+			Assert.Equal(shared, shared, "same frozen reference")
 		end)
 	end)
 

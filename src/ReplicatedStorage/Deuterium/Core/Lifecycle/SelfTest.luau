@@ -3,9 +3,9 @@
 -- Studio-only sanity for the W1.5 lifecycle plumbing. Command bar:
 --   require(game.ReplicatedStorage.Deuterium.Core.Lifecycle.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 local Kernel = require(script.Parent.Parent.Container.Kernel)
 local BootSequencer = require(script.Parent.BootSequencer)
 local ShutdownManager = require(script.Parent.ShutdownManager)

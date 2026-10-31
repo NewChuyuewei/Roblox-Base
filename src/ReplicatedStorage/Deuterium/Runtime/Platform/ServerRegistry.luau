@@ -39,8 +39,10 @@ function ServerRegistry.Start(): boolean
 		_registered = true
 		return true
 	end
-	local sortedMap = map()
-	if sortedMap == nil then
+	-- 头部承诺“所有调用 pcall 包裹、异常时降级”；获取 sortedMap 本身也要包上，
+	-- 否则服务故障会直接抛出而不是降级（独立复审 subagent, runtime lane 2026-10-25）。
+	local okMap, sortedMap = pcall(map)
+	if not okMap or sortedMap == nil then
 		return false
 	end
 	local ok = pcall(function()

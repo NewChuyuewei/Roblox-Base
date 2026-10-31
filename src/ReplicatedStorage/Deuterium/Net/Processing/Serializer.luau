@@ -4,7 +4,7 @@
 -- precomputes the field layout at Define time and never re-walks the spec at runtime
 -- (static > dynamic, per the framework invariant).
 
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 export type FieldType =
 	"u8"
@@ -158,6 +158,15 @@ function Serializer.Unpack(schema: Schema, buf: buffer): { [string]: any }
 			)
 		end
 		if field.type == "string" then
+			-- 先判界再读（其余字段都是这个顺序）：否则截断的缓冲会抛裸的 buffer 越界错误，
+			-- 而不是结构化错误（调用方据此分不清“数据坏了”与“代码 bug”）。
+			if cursor + 4 > len then
+				ErrorHandler.Raise(
+					"DR.NET.SER.TRUNC",
+					`{schema.name}: truncated length prefix at field {field.name}`,
+					"Dr.Serializer"
+				)
+			end
 			local byteLen = buffer.readu32(buf, cursor)
 			cursor += 4
 			if field.maxLen ~= nil and byteLen > (field.maxLen :: number) then

@@ -4,7 +4,7 @@
 -- each queue through its sender. Verifies wiring by refusing to duplex.
 
 local PacketQueue = require(script.Parent.PacketQueue)
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 
 local BatchProcessor = {}
 

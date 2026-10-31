@@ -2,12 +2,12 @@
 -- Dr.Testing.TestRunner — executes suites, isolates failures, reports a frozen summary.
 -- Studio-only by policy: Prod boot never runs tests.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local Suite = require(script.Parent.TestSuite)
 local TestContext = require(script.Parent.TestContext)
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Runtime.Environment.RunContext)
 
 export type CaseResult = {
 	name: string,

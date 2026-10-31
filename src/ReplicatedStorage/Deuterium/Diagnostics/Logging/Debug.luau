@@ -21,7 +21,6 @@ return table.freeze({
 	warn = function(...: any): ()
 		facade:warn(...)
 	end,
-	err = function(...: any): ()
-		facade:error(...)
-	end,
 })
+-- `err` 已删除（2026-10-25）：全仓库零调用方（18 个遗留调用点只用 print/warn），
+-- 按“删优于加”不保留未使用的门面。需要错误级别时用 Logger 的 :error()。

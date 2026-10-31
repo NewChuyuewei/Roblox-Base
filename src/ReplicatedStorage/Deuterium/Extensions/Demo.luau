@@ -4,9 +4,9 @@
 -- It carries its own fault injection: Demo.BadActor registers and throws on Init;
 -- the kernel must isolate it while Demo boots clean.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Debug)
 
-local Types = require(game:GetService("ReplicatedStorage").Deuterium.Core.Container.Types)
+local Types = require(script.Parent.Parent.Core.Container.Types)
 
 local Demo = {}
 

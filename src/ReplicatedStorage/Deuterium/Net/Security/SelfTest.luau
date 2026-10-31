@@ -3,12 +3,12 @@
 -- and crypto KATs (SHA-256 NIST + HMAC RFC 4231). Command bar:
 --   require(game.ReplicatedStorage.Deuterium.Net.Security.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
-local Sha256 = require(game:GetService("ReplicatedStorage").Deuterium.Security.Crypto.Sha256)
-local Hmac = require(game:GetService("ReplicatedStorage").Deuterium.Security.Crypto.Hmac)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
+local Sha256 = require(script.Parent.Parent.Parent.Security.Crypto.Sha256)
+local Hmac = require(script.Parent.Parent.Parent.Security.Crypto.Hmac)
 local RateLimiter = require(script.Parent.RateLimiter)
 local ReplayGuard = require(script.Parent.ReplayGuard)
 local PacketValidator = require(script.Parent.PacketValidator)

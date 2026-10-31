@@ -11,8 +11,9 @@ local RuntimeTypes = require(script.Parent.Parent.RuntimeTypes)
 
 local InstanceTracker = {}
 
--- Weak keys: a forgotten instance that is GC'd without Destroy must never leak.
 -- Values are `true` for membership only; typed boolean to allow nil-out on release.
+-- （原文在这里多一句“Weak keys: a forgotten instance … never leak”，与紧接着的
+--   “Plain tables, no weak keys” 以及实际实现直接矛盾，已删除。）
 -- Plain tables, no weak keys: in Roblox an Instance that goes away without Destroy()
 -- essentially never happens (engine references anchor it), and weak tables scramble
 -- strict-mode typing. Destroy-driven auto-drop below is the real leak guard.

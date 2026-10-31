@@ -4,7 +4,7 @@
 --   u16 opId | u32 payloadByteLen | payload bytes
 -- Strict length prefixing + bounded read = the wire cannot make us read out of bounds.
 
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local HEADER_SIZE = 6 -- u16 + u32
 local MAX_PAYLOAD_BYTES = 4096 -- hard cap, W2.3 validator enforces smaller per-channel

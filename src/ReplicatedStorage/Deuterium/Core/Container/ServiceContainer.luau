@@ -35,7 +35,7 @@ end
 
 -- Test-only escape hatch. Studio-only.
 function ServiceContainer.Reset(): ()
-	local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+	local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 	assert(RunContext.IsStudio(), "[Dr.ServiceContainer] Reset is Studio-only")
 	local fresh: { [string]: any } = {}
 	_instances = fresh

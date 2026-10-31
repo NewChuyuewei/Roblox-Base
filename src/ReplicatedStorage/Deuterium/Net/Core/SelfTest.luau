@@ -4,10 +4,10 @@
 -- Run in Studio server command bar:
 --   require(game.ReplicatedStorage.Deuterium.Net.Core.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 local NetworkManager = require(script.Parent.NetworkManager)
 local LocalBridge = require(script.Parent.Parent.Bridge.LocalBridge)
 local MockBridge = require(script.Parent.Parent.Bridge.MockBridge)

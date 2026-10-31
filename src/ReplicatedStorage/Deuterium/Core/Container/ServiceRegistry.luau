@@ -99,7 +99,7 @@ end
 
 -- Test-only escape hatch. Studio-only: production must never lose the registry.
 function ServiceRegistry.Reset(): ()
-	local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+	local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 	assert(RunContext.IsStudio(), "[Dr.ServiceRegistry] Reset is Studio-only")
 	_byName = {}
 	_order = {}

@@ -17,6 +17,10 @@ local _defs: { [string]: RuntimeTypes.FeatureFlagDef } = {}
 -- Flattened effective values (resolved at Define time; RunContext is static per session).
 local _effective: { [string]: boolean } = {}
 local _locked: boolean = false
+-- LoadFromConfig 的幂等门。为什么必须有：调用方都用 IsLocked() 做前置判断，而它在 Lock()
+-- 之前**始终为 false**，所以两个都在 Lock 之前的调用方会第二次撞上“duplicate flag”而崩。
+-- （独立复审 subagent, runtime lane 2026-10-25 报出。）
+local _configLoaded: boolean = false
 
 local FeatureFlags = {}
 
@@ -59,7 +63,11 @@ end
 -- ReplicatedStorage/Configs/Deuterium/FeatureFlags (per project config layout).
 function FeatureFlags.LoadFromConfig(): ()
 	assert(not _locked, "[Dr.FeatureFlags] LoadFromConfig called after Lock")
-	local configs = game:GetService("ReplicatedStorage"):WaitForChild("Configs", CONFIG_PATH_TIMEOUT)
+	if _configLoaded then
+		return -- 幂等：重复调用不得再 Define（见 _configLoaded 的声明处）
+	end
+	-- 同上：相对路径，使本函数可在 headless 下被真实执行（见 Configuration.luau 的注释）
+	local configs = script.Parent.Parent.Parent.Parent:WaitForChild("Configs", CONFIG_PATH_TIMEOUT)
 	local deuterium = configs and configs:WaitForChild("Deuterium", CONFIG_PATH_TIMEOUT)
 	local flagsModule = deuterium and deuterium:WaitForChild("FeatureFlags", CONFIG_PATH_TIMEOUT)
 	assert(
@@ -69,12 +77,13 @@ function FeatureFlags.LoadFromConfig(): ()
 	-- Static require path: luau-lsp only resolves requires whose argument is an
 	-- instance path expression; the WaitForChild chain above still guards runtime.
 	local defs =
-		require(game:GetService("ReplicatedStorage").Configs.Deuterium.FeatureFlags) :: { RuntimeTypes.FeatureFlagConfigEntry }
+		require(script.Parent.Parent.Parent.Parent.Configs.Deuterium.FeatureFlags) :: { RuntimeTypes.FeatureFlagDef }
 	assert(type(defs) == "table", "[Dr.FeatureFlags] config module must return a table")
 	for index, def in defs do
 		local checked = validateEntry(def, index)
 		FeatureFlags.Define(checked.name, checked.default, checked.studioOverride)
 	end
+	_configLoaded = true
 end
 
 -- Called once during Kernel init. After this, the flag set is immutable.

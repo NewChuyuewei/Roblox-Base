@@ -4,7 +4,7 @@
 -- Idea: define a contract once; every call through the facade is protected and
 -- reported, so a misbehaving vendor module can never crash or silently corrupt the game.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
 
 local ExternalBridge = {}
 

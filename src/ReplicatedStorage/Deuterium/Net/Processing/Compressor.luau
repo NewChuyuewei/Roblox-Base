@@ -4,7 +4,12 @@
 -- The compression contract is: decode(encode(x)) == x, ALWAYS, with hard expansion caps
 -- so a hostile/corrupt payload cannot blow up memory (zip-bomb defense is a hard invariant).
 
-local MAX_EXPAND_FACTOR = 32 -- decoded size may not exceed 32x the encoded size
+-- 本格式的最大膨胀比是**推出来的**，不是拍的：编码器把最多 130 个相同字节压成 2 个字节
+-- （flag + 长度），所以 1 字节编码最坏解出 130 字节 → 上限为 130/2 = **65×**。
+-- 旧值 32 会让 Decode 拒收 Encode 自己的输出：任何 65–130 字节的连续重复段（例如 130 个 0）
+-- 编码成 2 字节后，outCap = 2×32 = 64 < 130 → 抛 “expansion cap exceeded”。
+-- 修复依据与复现：独立复审（subagent, net lane）2026-10-25。
+local MAX_EXPAND_FACTOR = 65 -- decoded size may not exceed 65x the encoded size
 local MAX_DECODE_BYTES = 1048576 -- absolute ceiling 1 MiB after expansion
 
 local Compressor = {}

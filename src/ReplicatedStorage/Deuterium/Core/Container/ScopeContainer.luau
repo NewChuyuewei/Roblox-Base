@@ -4,7 +4,7 @@
 -- (connections, instances, teardown handlers) and kills it all in one Destroy().
 -- This is the handle Bulkhead/ShutdownManager will hold later.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
 
 local ScopeContainer = {}
 

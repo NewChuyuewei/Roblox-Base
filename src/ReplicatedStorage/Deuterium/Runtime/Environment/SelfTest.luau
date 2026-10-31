@@ -4,8 +4,8 @@
 -- Run in Studio server command bar:
 --   require(game.ReplicatedStorage.Deuterium.Runtime.Environment.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local RunContext = require(script.Parent.RunContext)
 local EngineVersion = require(script.Parent.EngineVersion)
@@ -78,12 +78,8 @@ function SelfTest.RunAll(): boolean
 				local snap = FeatureFlags.Snapshot()
 				expect(type(snap["Dr.Diagnostics.StructuredLogs"]) == "boolean", "snapshot")
 				-- config table must be frozen (tamper-proof)
-				local raw = require(
-					game:GetService("ReplicatedStorage")
-						:WaitForChild("Configs")
-						:WaitForChild("Deuterium")
-						:WaitForChild("FeatureFlags")
-				)
+				-- 相对路径（原来是跨行的绝对 require）：以便本套件在 headless 下也能被装载
+				local raw = require(script.Parent.Parent.Parent.Parent.Configs.Deuterium.FeatureFlags)
 				expect(table.isfrozen(raw), "config table frozen")
 				expect(table.isfrozen(raw[1]), "config entry frozen")
 				expect(pcall(FeatureFlags.Get, "Dr.Security.StrictSchema") == true, "get after lock ok")

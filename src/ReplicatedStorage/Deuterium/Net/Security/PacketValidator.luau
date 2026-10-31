@@ -22,9 +22,9 @@ function PacketValidator.Check(buf: buffer, maxBytes: number): Verdict
 		return table.freeze({ ok = false, reason = `oversize {size}B > {maxBytes}B` }) :: any
 	end
 
-	local ok, envelope = pcall(function()
-		return Packet.Decode(buf)
-	end)
+	-- 每包验证都在热路径上：不要为此分配匿名闭包（P0 规约）。
+	-- Packet.Decode 的签名就是 (buf)，可以直接交给 pcall。
+	local ok, envelope = pcall(Packet.Decode, buf)
 	if not ok then
 		return table.freeze({ ok = false, reason = `malformed: {tostring(envelope)}` }) :: any
 	end

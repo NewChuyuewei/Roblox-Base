@@ -2,7 +2,7 @@
 -- Dr.Testing.Assert — assertions are structured errors (DrError), never bare strings.
 -- Every failure has a code so CI/debugging can grep exactly what broke.
 
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local ErrorHandler = require(script.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local Assert = {}
 

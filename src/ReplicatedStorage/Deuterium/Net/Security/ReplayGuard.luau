@@ -19,6 +19,11 @@ export type NonceRing = {
 }
 
 local _rings: { [string]: NonceRing } = {}
+-- 单条记忆化：验证路径每帧都会调到，而 `replay:{key}` 是拼出来的新字符串（P0 规约禁止
+-- 热路径上的无谓分配）。同一个 key 重复验证时直接复用上一次的结果。
+-- 注意：key 交替时仍会分配（与改前等价，不会回退）。
+local _lastKey: string? = nil
+local _lastLimiterKey: string? = nil
 
 local function ringFor(key: string, size: number): NonceRing
 	local r = _rings[key]
@@ -42,7 +47,11 @@ function ReplayGuard.Verify(
 	assert(type(nonce) == "string" and #nonce >= 8, "[Dr.ReplayGuard] nonce must be >= 8 chars")
 	assert(type(ts) == "number", "[Dr.ReplayGuard] ts must be a number")
 
-	if not RateLimiter.Allow(`replay:{key}`, 1, 30, 30) then
+	if key ~= _lastKey then
+		_lastKey = key
+		_lastLimiterKey = `replay:{key}`
+	end
+	if not RateLimiter.Allow(_lastLimiterKey :: string, 1, 30, 30) then
 		return false -- global throttle even on the verification path
 	end
 

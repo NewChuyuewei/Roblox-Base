@@ -3,7 +3,7 @@
 -- Test double for the full bridge surface. Everything winds up in `Log` so a MockBridge
 -- test is a pure table assertion — nothing replicates, nothing touches Player instances.
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 
 local MockBridge = {}
 
@@ -48,6 +48,9 @@ function MockBridge.Open(name: string): Handle
 			for _, conn in listeners do
 				conn:Disconnect()
 			end
+			-- 必须清表：否则监听器列表跨 Reset 递增，每次 Reset 都去断一批早已死掉的连接
+			-- （独立复审 subagent, net lane 2026-10-25 报出）。
+			table.clear(listeners)
 		end,
 	}
 	return handle :: any

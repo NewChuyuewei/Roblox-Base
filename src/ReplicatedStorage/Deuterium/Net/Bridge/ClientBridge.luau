@@ -3,7 +3,7 @@
 -- Client-only channel handle. Fire targets the server; server never sees a raw RemoteEvent.
 
 local Channel = require(script.Parent.Parent.Core.Channel)
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 
 local ClientBridge = {}
 

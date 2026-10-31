@@ -3,8 +3,8 @@
 -- Studio-only sanity checks. Run in Studio server command bar:
 --   require(game.ReplicatedStorage.Deuterium.Runtime.Interop.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local RunContext = require(script.Parent.Parent.Environment.RunContext)
 local LegacyBridge = require(script.Parent.LegacyBridge)
@@ -42,7 +42,8 @@ function SelfTest.RunAll(): boolean
 		{
 			name = "LegacyBridge requires the Debug module",
 			fn = function()
-				local dbg = game:GetService("ReplicatedStorage"):WaitForChild("Debug")
+				-- 相对路径：保留 WaitForChild（行为不变），但不再在加载/执行期碰 game
+				local dbg = script.Parent.Parent.Parent.Parent:WaitForChild("Debug")
 				local ok, mod = LegacyBridge.SafeRequire(dbg)
 				expect(ok, "Debug required")
 				expect(type(mod) == "table", "Debug returns table")

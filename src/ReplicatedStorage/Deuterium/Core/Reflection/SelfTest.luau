@@ -2,16 +2,16 @@
 -- Dr.Core.Lifecycle.SelfTest additions for W1.6 (Reflection + Types.Contract + Configuration).
 -- Command bar: require(game.ReplicatedStorage.Deuterium.Core.Reflection.SelfTest).RunAll()
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
-local ErrorHandler = require(game:GetService("ReplicatedStorage").Deuterium.Core.Foundation.ErrorHandler)
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
+local ErrorHandler = require(script.Parent.Parent.Foundation.ErrorHandler)
 
-local RunContext = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.RunContext)
-local Descriptor = require(game:GetService("ReplicatedStorage").Deuterium.Core.Reflection.Descriptor)
-local Inspector = require(game:GetService("ReplicatedStorage").Deuterium.Core.Reflection.Inspector)
-local Proxy = require(game:GetService("ReplicatedStorage").Deuterium.Core.Reflection.Proxy)
-local Interface = require(game:GetService("ReplicatedStorage").Deuterium.Types.Contract.Interface)
-local Configuration = require(game:GetService("ReplicatedStorage").Deuterium.Core.Lifecycle.Configuration)
-local FeatureFlags = require(game:GetService("ReplicatedStorage").Deuterium.Runtime.Environment.FeatureFlags)
+local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
+local Descriptor = require(script.Parent.Descriptor)
+local Inspector = require(script.Parent.Inspector)
+local Proxy = require(script.Parent.Proxy)
+local Interface = require(script.Parent.Parent.Parent.Types.Contract.Interface)
+local Configuration = require(script.Parent.Parent.Lifecycle.Configuration)
+local FeatureFlags = require(script.Parent.Parent.Parent.Runtime.Environment.FeatureFlags)
 
 local SelfTest = {}
 

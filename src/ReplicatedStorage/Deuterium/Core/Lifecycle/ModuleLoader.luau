@@ -3,7 +3,7 @@
 -- Discovers provider modules under a folder and returns their tables.
 -- Discovery is Init-time only — after Construct the world is frozen.
 
-local Debug = require(game:GetService("ReplicatedStorage"):WaitForChild("Debug"))
+local Debug = require(script.Parent.Parent.Parent.Parent.Debug)
 local Contract = require(script.Parent.Parent.Foundation.Contract)
 
 local ModuleLoader = {}
@@ -15,7 +15,9 @@ function ModuleLoader.LoadProviders(folder: Instance): { any }
 	Contract.IsA(folder, "Instance", "MODULES.FOLDER", "ModuleLoader.LoadProviders expects an Instance")
 	local providers = {}
 	for _, child in folder:GetDescendants() do
-		if child:IsA("ModuleScript") and child.Name:sub(-10) ~= ".selftest" and child.Name ~= "SelfTest" then
+		-- ".selftest" 是 9 个字符；旧代码写 sub(-10) 永远不相等（差一位），排除逻辑完全失效
+		--（实际只靠后面的 Name ~= "SelfTest" 撑着）。见 subagent core lane 2026-10-25。
+		if child:IsA("ModuleScript") and child.Name:sub(-9) ~= ".selftest" and child.Name ~= "SelfTest" then
 			local ok, mod = pcall(require, child)
 			if ok and type(mod) == "table" then
 				local candidate = mod :: { Name: unknown }

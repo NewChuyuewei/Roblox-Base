@@ -23,18 +23,28 @@ end
 
 -- Shape assertion for values crossing module boundaries.
 --
--- ⚠ 已知不一致（2026-10-25 代码优化时发现，尚未修）：本函数用 `type`，而
--- `Types/Contract/Interface.Conform` 用 `typeof`。两者对宿主定义的类型给出**不同名字**：
---   type(part)   == "userdata"   /  typeof(part) == "Part"
---   type(nil)    == "nil"        /  typeof(nil)  == "nil"
--- 所以 `Contract.IsA(part, "Part")` 会**误报失败**，而同样的值在 `Conform` 里会通过。
--- 修复方向是改用 typeof（会改变行为，故按“重构与修 bug 分开”的规则单独立项）。
--- 当前零调用方，所以尚未造成实际故障。记录在 .plan/README.md 的风险 R26。
+-- 类型名取自 `typeof`，不用 `type`（官方语义，已核实）：
+--   type(part)  == "userdata"   /  typeof(part)  == "Folder"/"Part"（ClassName）
+--   type(nil)   == "nil"        /  typeof(nil)   == "nil"
+-- 旧实现用 `type`，于是 `Contract.IsA(folder, "Instance")` **永远失败**——而 ModuleLoader
+-- 与 HotReload 正是这么调的（它们的加载路径因此直接抛错）。修复见 R26（2026-10-25）。
+--
+-- 伪类型 `"Instance"` 表示“任意 Roblox 实例”：typeof 对实例给出的是 ClassName 而不是
+-- "Instance"，所以这个伪名需要单独判定。
 function Contract.IsA(value: any, kind: string, code: string, message: string?)
-	if type(value) ~= kind then
+	local valueKind = typeof(value)
+	local actualKind = valueKind
+	if kind == "Instance" then
+		-- Roblox 实例：type 为 "userdata"（官方文档）；兼容地把带 ClassName 的表也认下
+		local t = type(value)
+		if valueKind ~= "nil" and (t == "userdata" or (t == "table" and (value :: any).ClassName ~= nil)) then
+			actualKind = "Instance"
+		end
+	end
+	if actualKind ~= kind then
 		ErrorHandler.Raise(
 			"DR.CONTRACT.TYPE." .. code,
-			(message or "type mismatch") .. ` (expected {kind}, got {type(value)})`
+			(message or "type mismatch") .. ` (expected {kind}, got {actualKind})`
 		)
 	end
 end
