@@ -574,3 +574,21 @@ stylua --config-path stylua.toml --check Deuterium TritiumSQL \
 ---
 
 未读/未验证：`rokit` 安装脚本 URL、`luau.load(..., {environment=...})` 确切签名、`globalTypes.d.luau` 取得方式 —— 三项都在 Step 7 与 Step 8 里做成了显式的「一次确认并固化」动作，未确认前不写死。风险：Step 8 的 CI 首次跑通可能需要一轮调试（镜像/网络），预算半小时。
+
+---
+
+## 附：零调用方清单（backlog，由全量复审登记）
+
+> 规则（AGENTS.md §6.5）：**未被执行过的路径不算证据**。这些导出目前无调用方，但属计划中声明的 API，
+> 因此**登记保留**而非删除；它们各自被接线时必须同时补用例。
+
+| 导出 | 位置 | 处置 |
+| --- | --- | --- |
+| `ScopeContainer.New` | `Core/Container/ScopeContainer.luau` | 保留（Bulkhead 隔离单元，待 `D4.x`） |
+| `ModuleLoader.LoadProviders` | `Core/Lifecycle/ModuleLoader.luau` | 保留（`D0.5` 纵切后接线） |
+| `HotReload.IsEnabled` / `Watch` | `Core/Lifecycle/HotReload.luau` | 保留（Studio 工装） |
+| `ServiceContainer.Has` · `ServiceRegistry.Has/Count` | `Core/Container/*` | 保留（容器查询 API） |
+| `TestRunner.RunAll` | `Testing/TestRunner.luau` | 保留（门禁 1 约定 `RunAll` 入口） |
+| `TestContext.note` | `Testing/TestContext.luau` | 保留（报告细节） |
+| `InstanceTracker.ReleaseAll` | `Runtime/Platform/InstanceTracker.luau` | 保留（ShutdownManager 安全网，待接线） |
+| `UnreliableChannel`（整模块） | `Net/Core/UnreliableChannel.luau` | 保留：文件头自述“当前与 Channel 同一注册表，待 W2.5 换 UnreliableRemoteTransport” |

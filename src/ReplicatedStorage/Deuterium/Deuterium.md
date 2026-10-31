@@ -65,8 +65,8 @@ Dr.Signal/
 Dr.Net/
   Core/         NetworkManager · Channel · UnreliableChannel · MultiChannel · ConnectionPool
   Bridge/       ClientBridge · ServerBridge · MockBridge · LocalBridge
-  Processing/   Packet · Middleware · RateLimiter · Serializer · Compressor · BatchProcessor · PacketQueue · ProtocolBuffer
-  Security/     RequestSigner · ReplayGuard · PacketValidator
+  Processing/   Packet · Middleware · Serializer · Compressor · BatchProcessor · PacketQueue · ProtocolBuffer
+  Security/     RequestSigner · ReplayGuard · PacketValidator · RateLimiter
 Dr.Data/        ⚠️ PlayerData 底层使用 PlayerState 库；所有写操作强制走六段流程，不得绕过
   Core/         DataManager · DataTypes · DataPipeline · DataRegistry
   Store/        PlayerData（封装 PlayerState） · GlobalData · OrderedData · EphemeralData · ComputedData
