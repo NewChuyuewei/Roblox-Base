@@ -321,6 +321,17 @@ local SUITES = {
 		kind = "engine",
 	},
 	{
+		-- Phase 0.5 端到端纵切（Step 16.5）：让架构接缝暴露，不是做出能用的数据库。
+		-- 链路：SpikePort → SpikeStore(页+索引) → TriSQL(Compile/Run) → 读回断言
+		-- 代码在 TritiumSQL/Tri/Spike/（DAL E、非认证范围、验收后可删）。
+		name = "Phase 0.5 端到端纵切（TriSQL 内存全链）",
+		kind = "checks",
+		modules = { RS .. "/TritiumSQL/Tri/Spike/Walkthrough.luau" },
+		run = function(m)
+			return m.Walkthrough.Run()
+		end,
+	},
+	{
 		-- 由“变异测试”发现的测试缺口：以下三个修复原本**没有任何测试能抓住它们的回退**
 		-- （把修复反向改回，整个 suite 仍然是绿的）。详见 .plan/README.md 的风险表。
 		name = "变异测试补洞：ProtocolBuffer 冻结 / Shutdown 逆序 / selftest 排除",
