@@ -18,7 +18,7 @@ function TestContext.New(suite: string, test: string, studio: boolean, sink: { s
 		test = test,
 		studio = studio,
 		note = function(_self: TestContext, line: string)
-			table.insert(sink, `[${suite}/${test}] ${line}`)
+			table.insert(sink, `[{suite}/{test}] {line}`)
 		end,
 	}) :: any
 end

@@ -15,8 +15,7 @@
 -- 正解：这一层单独放一个**用绝对路径**的垫片（它不在认证范围，可以用 game:GetService），
 -- 真正的实现只在 Deuterium 树里映射一次。垫片不改任何既有调用方。
 
-local Logging = game:GetService("ReplicatedStorage"):WaitForChild("Deuterium"):WaitForChild("Diagnostics"):WaitForChild(
-	"Logging"
-)
-
-return require(Logging.Debug)
+-- 用**相对路径**而不是 game:GetService：行为等价（script.Parent 就是 ReplicatedStorage），
+-- 但垫片从此可在 headless 下加载 —— 而它是 18 个遗留调用点的入口，
+-- 直接决定了那 19 个模块能不能进 CI（实测：它们全部卡在这一行）。
+return require(script.Parent.Deuterium.Diagnostics.Logging.Debug)

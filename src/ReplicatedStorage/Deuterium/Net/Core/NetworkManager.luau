@@ -7,7 +7,16 @@
 local RunContext = require(script.Parent.Parent.Parent.Runtime.Environment.RunContext)
 local ServiceLocator = require(script.Parent.Parent.Parent.Runtime.Platform.ServiceLocator)
 
-local ReplicatedStorage = ServiceLocator.Get("ReplicatedStorage")
+-- 懒取 ReplicatedStorage：加载期不碰引擎。原来在这一行直接取服务，使整条 Net 链（本模块 +
+-- Channel/MultiChannel/UnreliableChannel/ClientBridge/ServerBridge/SelfTest，共 7 个）在 headless
+-- 下全部无法装载；这是全量装载巡检最后一批失败（见 docs/headless.md 的指标）。
+local _replicatedStorage: ReplicatedStorage? = nil
+local function replicatedStorage(): ReplicatedStorage
+	if _replicatedStorage == nil then
+		_replicatedStorage = ServiceLocator.Get("ReplicatedStorage") :: ReplicatedStorage
+	end
+	return _replicatedStorage :: ReplicatedStorage
+end
 
 local NetworkManager = {}
 
@@ -23,11 +32,11 @@ end
 
 local function rootFolder(): Folder
 	if _root == nil then
-		_root = ReplicatedStorage:FindFirstChild(REMOTE_ROOT_NAME) :: Folder?
+		_root = replicatedStorage():FindFirstChild(REMOTE_ROOT_NAME) :: Folder?
 		if _root == nil then
 			local f = Instance.new("Folder")
 			f.Name = REMOTE_ROOT_NAME
-			f.Parent = ReplicatedStorage
+			f.Parent = replicatedStorage()
 			_root = f
 		end
 	end
@@ -71,7 +80,7 @@ function NetworkManager.GetChannel(name: string): RemoteEvent
 		error(`[Dr.NetworkManager] unknown channel after Lock: {name}`, 2)
 	end
 	-- client cold path
-	local folder = ReplicatedStorage:FindFirstChild(REMOTE_ROOT_NAME)
+	local folder = replicatedStorage():FindFirstChild(REMOTE_ROOT_NAME)
 	assert(folder ~= nil, "[Dr.NetworkManager] DrRemotes folder missing on client - is the server booted?")
 	local child = folder:WaitForChild(name, 10)
 	assert(child ~= nil and child:IsA("RemoteEvent"), `[Dr.NetworkManager] channel not available: {name}`)

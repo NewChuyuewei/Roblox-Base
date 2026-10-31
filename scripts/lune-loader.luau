@@ -19,6 +19,7 @@
 --   * 没有 `warn` 全局 -> 必须提供，否则"失败路径"会炸成 nil call 并掩盖真错误
 
 local fs = require("@lune/fs")
+local RbxStub = require("./rbx-stub")
 local process = require("@lune/process")
 
 local Loader = {}
@@ -197,40 +198,6 @@ local function scan(dirPath: string): any
 end
 
 -- ---------- 环境 ----------
-local function stubService(name: string): any
-	if name == "ReplicatedStorage" then
-		return Loader.mount()
-	end
-	-- 通用桩：方法一律给出"无害的假值"，让加载期调用不至于炸
-	return setmetatable({}, {
-		__index = function(_, key)
-			if key == "IsA" then
-				return function()
-					return false
-				end
-			end
-			return function()
-				return nil
-			end
-		end,
-	})
-end
-
-local function engineStub(): any
-	return setmetatable({}, {
-		__index = function(_, key)
-			if key == "GetService" then
-				return function(_, name: string)
-					return stubService(name)
-				end
-			end
-			return function()
-				return nil
-			end
-		end,
-	})
-end
-
 -- 构造一个模块的 globals 环境。scriptNode 即该模块的 script。
 function Loader.env(scriptNode: any, opts: { engineStub: boolean? }?): { [string]: any }
 	-- `script` 必须是**节点本身**，不能是 `{ Parent = parentOf[node] }` 这种手写小表：
@@ -253,7 +220,7 @@ function Loader.env(scriptNode: any, opts: { engineStub: boolean? }?): { [string
 		return target
 	end
 	if opts ~= nil and opts.engineStub == true then
-		env.game = engineStub()
+		RbxStub.apply(env, opts, Loader.mount())
 	end
 	setmetatable(env, { __index = GLB })
 	return env

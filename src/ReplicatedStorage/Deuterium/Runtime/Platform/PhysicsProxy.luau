@@ -10,7 +10,15 @@
 local Platform = script.Parent
 local ServiceLocator = require(Platform.ServiceLocator)
 
-local Workspace = ServiceLocator.Get("Workspace") :: Workspace
+-- 懒取 Workspace：加载期不碰引擎。原来在这一行直接取服务，使本模块（以及任何 require 它
+-- 的模块）在 headless 下无法装载；这是全量装载巡检里最后一个卡在 ServiceLocator.Get 的点。
+local _workspace: Workspace? = nil
+local function workspace(): Workspace
+	if _workspace == nil then
+		_workspace = ServiceLocator.Get("Workspace") :: Workspace
+	end
+	return _workspace :: Workspace
+end
 
 local PhysicsProxy = {}
 
@@ -37,7 +45,7 @@ function PhysicsProxy.Raycast(
 	direction: Vector3,
 	params: RaycastParams?
 ): (boolean, RaycastResult?)
-	local result = Workspace:Raycast(origin, direction, params)
+	local result = workspace():Raycast(origin, direction, params)
 	return result ~= nil, result
 end
 
@@ -48,7 +56,7 @@ function PhysicsProxy.LineOfSight(from: Vector3, to: Vector3, ignoreInstances: {
 	if ignoreInstances ~= nil then
 		params.FilterDescendantsInstances = ignoreInstances
 	end
-	local hit = Workspace:Raycast(from, to - from, params)
+	local hit = workspace():Raycast(from, to - from, params)
 	return hit == nil
 end
 

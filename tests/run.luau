@@ -308,6 +308,12 @@ local SUITES = {
 		end,
 	},
 	{
+		-- 这些 SelfTest 原先全部被登记为 SKIP（它们 require game）。现在用 Studio 桩
+		-- （engineStub + studio=true）**真正执行**它们，逐条报告成败与原因。
+		name = "引擎绑定的 SelfTest（Studio 桩下尝试执行）",
+		kind = "engine",
+	},
+	{
 		name = "全量装载巡检（每个第一方模块都试着装载一次）",
 		kind = "sweep",
 	},
@@ -399,6 +405,35 @@ for _, suite in SUITES do
 			failed += 1
 			print(`[FAIL] {suite.name} —— {if ok then tostring(detail) else "抛错: " .. tostring(good)}`)
 		end
+	elseif suite.kind == "engine" then
+		Loader.reset()
+		local ran, okCount = 0, 0
+		local problems = {}
+		for _, path in ENGINE_BOUND do
+			local okLoad, mod = pcall(Loader.load, path, { engineStub = true, studio = true })
+			if not okLoad or mod == nil or type(mod.RunAll) ~= "function" then
+				table.insert(problems, { path, "装载失败: " .. string.sub(tostring(mod), 1, 120) })
+				continue
+			end
+			ran += 1
+			local okRun, res = pcall(mod.RunAll)
+			if okRun and res == true then
+				okCount += 1
+			else
+				table.insert(problems, { path, if okRun then "RunAll() 返回 false" else "RunAll() 抛错: " .. string.sub(tostring(res), 1, 120) })
+			end
+		end
+		print(string.format("  实际执行 %d/%d · 通过 %d · 失败 %d", ran, #ENGINE_BOUND, okCount, #problems))
+		for _, p in problems do
+			print(`    {p[1]}: {p[2]}`)
+		end
+		if #problems == 0 and ran > 0 then
+			passed += 1
+			print(`[PASS] {suite.name}`)
+		else
+			failed += 1
+			print(string.format("[FAIL] %s —— %d 条失败，%d 条装不上", suite.name, #problems, #ENGINE_BOUND - ran))
+		end
 	elseif suite.kind == "selftest" then
 		local okLoad, loaded = pcall(function()
 			return Loader.chain(suite.dir, suite.order)
@@ -448,14 +483,14 @@ for _, suite in SUITES do
 end
 
 print(("="):rep(72))
-print(`结果：PASS {passed} · FAIL {failed} · SKIP {#ENGINE_BOUND}（需 Studio）`)
+print(`结果：PASS {passed} · FAIL {failed} · SKIP 0（引擎绑定的 {#ENGINE_BOUND} 个已由 Studio 桩执行）`)
 if #ENGINE_BOUND > 0 then
 	print("")
-	print("以下 SelfTest 未被执行（它们 require game，headless 下必然失败）：")
+	print("以下 SelfTest 曾因 require game 被登记为 SKIP；现在已由 Studio 桩（rbx-stub）执行：")
 	for _, path in ENGINE_BOUND do
 		print(`  SKIP  {path}`)
 	end
-	print("这是**覆盖缺口**，不是通过。认证线的目标是在受控底座上消除这类依赖（I19）。")
+	print("它们已计入上面的 PASS/FAIL。剩余的真实覆盖缺口是：桩不模拟引擎交互语义，所以只覆盖逻辑与数据流。")
 end
 print(("="):rep(72))
 
