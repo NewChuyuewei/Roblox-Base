@@ -391,6 +391,11 @@ local function runSweep()
 			print(`    {relPath(e[1])}  ->  {string.sub(e[2], 1, 110)}`)
 		end
 	end
+	-- 关键：不加桩的装载数就是 R29 的哨兵 —— 新增代码若把引擎依赖放到加载期，
+	-- 这里会立刻变红。以前它只被**打印**、没被断言，等于哨兵不响。
+	if #plainBad > 0 then
+		return false, `不加引擎桩有 {#plainBad} 个模块装不上（有代码把引擎依赖放到了加载期）`
+	end
 	return #stubBad == 0, `加桩仍有 {#stubBad} 个模块装不上`
 end
 

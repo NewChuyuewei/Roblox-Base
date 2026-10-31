@@ -35,7 +35,11 @@ function Contract.IsA(value: any, kind: string, code: string, message: string?)
 	local valueKind = typeof(value)
 	local actualKind = valueKind
 	if kind == "Instance" then
-		-- Roblox 实例：type 为 "userdata"（官方文档）；兼容地把带 ClassName 的表也认下
+		-- Roblox 实例：type 为 "userdata"（官方文档）。
+		-- 兼容分支（带 ClassName 的表）是**有意放宽**的，代价要说清：一个含 ClassName
+		-- 字段的纯数据表会被判成实例（假阳性）。收益是这条判定能在 headless 下被真正测到
+		-- （引擎里没有真 Instance 可用）。若将来“假阳性”变成实际问题，删掉该分支即可 ——
+		-- 届时 tests/run.luau 的对应断言需同时改成用真实例（Studio 内）。
 		local t = type(value)
 		if valueKind ~= "nil" and (t == "userdata" or (t == "table" and (value :: any).ClassName ~= nil)) then
 			actualKind = "Instance"

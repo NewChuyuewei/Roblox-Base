@@ -9,6 +9,8 @@
 -- 旧值 32 会让 Decode 拒收 Encode 自己的输出：任何 65–130 字节的连续重复段（例如 130 个 0）
 -- 编码成 2 字节后，outCap = 2×32 = 64 < 130 → 抛 “expansion cap exceeded”。
 -- 修复依据与复现：独立复审（subagent, net lane）2026-10-25。
+-- 65 既是**充分**（最坏情形 2 字节解出 130 字节）也是**必要**的：设成 64 时，
+-- 2 字节的合法输入会被 outCap=128 拒收 —— 所以这不是“估计值”，是格式的精确上确界。
 local MAX_EXPAND_FACTOR = 65 -- decoded size may not exceed 65x the encoded size
 local MAX_DECODE_BYTES = 1048576 -- absolute ceiling 1 MiB after expansion
 

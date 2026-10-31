@@ -83,7 +83,11 @@ end
 
 -- 测试用：清掉探测缓存（headless 下切换桩环境时用）
 function RunContext.ResetProbe(): ()
+	-- 同时把缓存值复位：只清 _probed 会在“没有引擎”的下一次探测里提前 return，
+	-- 留下上一轮的旧值（不一致状态）。
 	_probed = false
+	isServer, isStudio, isRunMode = false, false, false
+	side, runKind = "Client", "Production"
 end
 
 return table.freeze(RunContext)
