@@ -13,6 +13,8 @@
 -- 运行：lune run tests/run.luau
 
 local Loader = require("../scripts/lune-loader")
+-- 桩只注入到“被装载模块”的环境，测试脚本自身没有 Roblox 全局 -> 需要实例的用例直接 require 桩
+local RbxStub = require("../scripts/rbx-stub")
 local process = require("@lune/process")
 
 local RS = "src/ReplicatedStorage"
@@ -319,6 +321,87 @@ local SUITES = {
 		kind = "engine",
 	},
 	{
+		-- 由“变异测试”发现的测试缺口：以下三个修复原本**没有任何测试能抓住它们的回退**
+		-- （把修复反向改回，整个 suite 仍然是绿的）。详见 .plan/README.md 的风险表。
+		name = "变异测试补洞：ProtocolBuffer 冻结 / Shutdown 逆序 / selftest 排除",
+		kind = "checks",
+		engineStub = true,
+		studio = true,
+		resetLoader = true,
+		modules = {
+			RS .. "/Deuterium/Net/Processing/ProtocolBuffer.luau",
+			RS .. "/Deuterium/Core/Container/Kernel.luau",
+			RS .. "/Deuterium/Core/Lifecycle/ShutdownManager.luau",
+			RS .. "/Deuterium/Core/Lifecycle/ModuleLoader.luau",
+		},
+		run = function(m)
+			local failures = {}
+			local function expect(cond, what)
+				if not cond then
+					table.insert(failures, what)
+				end
+			end
+			local ProtocolBuffer, Kernel, ShutdownManager, ModuleLoader = m.ProtocolBuffer, m.Kernel, m.ShutdownManager, m.ModuleLoader
+
+			-- ① ProtocolBuffer.Define 必须容忍**已冻结**的 schema
+			--    （table.freeze 对已冻结表会抛错；把条件冻结改回无条件冻结，本行即失败）
+			local frozenSchema = table.freeze({ name = "pb.probe", fields = { { name = "id", type = "u32" } } })
+			-- 签名是 Define(schema)（单参）
+			expect(pcall(ProtocolBuffer.Define, frozenSchema), "已冻结的 schema 必须被接受")
+
+			-- ② ShutdownManager 必须**逆序**停（消费方先于生产方）。
+			--    把 for 改成正序，下面顺序断言即失败。
+			Kernel.Reset()
+			ShutdownManager.ResetForTest()
+			local stopped = {}
+			local function provider(name)
+				return {
+					Name = name,
+					Init = function() end,
+					Stop = function()
+						table.insert(stopped, name)
+					end,
+				}
+			end
+			Kernel.Register(provider("P1"))
+			Kernel.Register(provider("P2"))
+			Kernel.Register(provider("P3"))
+			expect(Kernel.Construct(), "construct")
+			Kernel.Init()
+			Kernel.Start()
+			local order = Kernel.GetOrder()
+			ShutdownManager.Run()
+			expect(#stopped == #order, "每个 provider 都被 Stop 一次")
+			local reversed = true
+			for i = 1, #order do
+				if stopped[i] ~= order[#order - i + 1] then
+					reversed = false
+				end
+			end
+			expect(reversed, "Stop 顺序必须与启动顺序相反（消费方先停）")
+
+			-- ③ ModuleLoader 必须排除 *.selftest（后缀判定差一位就会漏排）
+			local folder = RbxStub.Instance.new("Folder")
+			folder.Name = "ProviderRoot"
+			local good = RbxStub.Instance.new("ModuleScript")
+			good.Name = "GoodProvider"
+			good.Parent = folder
+			local bogus = RbxStub.Instance.new("ModuleScript")
+			bogus.Name = "Bogus.selftest"
+			bogus.Parent = folder
+			local providers = ModuleLoader.LoadProviders(folder)
+			expect(#providers == 1, `只应装载 1 个 provider（实到 {#providers}）`)
+			expect(providers[1].Name == "GoodProvider", "且必须是那个非 selftest 的")
+
+			if #failures > 0 then
+				for _, f in failures do
+					print(`  断言失败: {f}`)
+				end
+			end
+			return #failures == 0, `{#failures} 条断言失败`
+		end,
+	},
+	{
 		name = "全量装载巡检（每个第一方模块都试着装载一次）",
 		kind = "sweep",
 	},
@@ -469,7 +552,12 @@ for _, suite in SUITES do
 		end
 	else
 		local byName = {}
-		local opts = { engineStub = suite.engineStub == true }
+		-- 测试隔离：模块级状态（如 _locked/_ran）会在同一进程内跨套件残留。
+		-- 声明 resetLoader = true 的套件拿到的是一份全新的模块实例。
+		if suite.resetLoader == true then
+			Loader.reset()
+		end
+		local opts = { engineStub = suite.engineStub == true, studio = suite.studio == true }
 		local okLoad, err = pcall(function()
 			for _, path in suite.modules do
 				local name = string.match(path, "([^/]+)%.luau$")

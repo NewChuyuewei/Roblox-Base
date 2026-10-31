@@ -103,7 +103,9 @@ LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTy
 3. 认证范围文件：每个导出函数头标 `-- LLR-<MOD>-nnn`；
 4. 已知限制写 `shortcut: <限制>, <何时升级>`；
 5. 非平凡逻辑配测试，且**测试必须真的被跑过**（未执行的测试等于注释）。
-6. **Luau 插值语法是 `{expr}`，不是 `${expr}`** —— `${expr}` 里的 `$` 是字面量，会打脏输出
+6. **修 bug 要配“会响”的测试**：写完修复后，把修复**反向改回**跑一遍 —— suite 仍然绿就说明这条修复没有测试保护（缺失用例）。
+   （本轮 8 处修复里有 4 处是这样发现的。）
+7. **Luau 插值语法是 `{expr}`，不是 `${expr}`** —— `${expr}` 里的 `$` 是字面量，会打脏输出
    （已踩：含产品代码 `TestContext.note`）。另：`table.freeze` 对**已冻结**的表会**抛错**（非幂等），
    冻结外部传入的表前先 `table.isfrozen` 判一下。
 
