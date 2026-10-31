@@ -42,4 +42,9 @@ function ShutdownManager.IsRan(): boolean
 	return _ran
 end
 
+-- 测试用：与 BootSequencer.ResetForTest 同因（让 Lifecycle 的 SelfTest 可重复运行）。
+function ShutdownManager.ResetForTest(): ()
+	_ran = false
+end
+
 return table.freeze(ShutdownManager)

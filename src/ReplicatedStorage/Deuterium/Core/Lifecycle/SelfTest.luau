@@ -28,6 +28,10 @@ local function expect(cond: boolean, what: string)
 end
 
 function SelfTest.RunAll(): boolean
+	-- 这两步让本套件**可重复运行**：BootSequencer/ShutdownManager 各有一个“只跑一次”
+	-- 的模块级守卫，Kernel.Reset() 清不掉它们（独立复审 subagent 报出的假失败）。
+	BootSequencer.ResetForTest()
+	ShutdownManager.ResetForTest()
 	assert(RunContext.IsStudio(), "[Dr.SelfTest.Lifecycle] Studio-only")
 	local failures = 0
 	local function record(label: string, ok: boolean, msg: string)

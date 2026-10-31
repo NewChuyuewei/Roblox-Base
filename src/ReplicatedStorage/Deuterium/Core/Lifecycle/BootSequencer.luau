@@ -23,4 +23,10 @@ function BootSequencer.Run(): boolean
 	return true -- providers may be partially failed; the game runs, Bulkhead isolates them
 end
 
+-- 测试用：清掉“只跑一次”的守卫。为什么需要：RunAll() 在一个进程里跑第二遍时，
+-- 旧实现会因为 _ran 仍为 true 而报假失败（独立复审 subagent, core lane 报出）。
+function BootSequencer.ResetForTest(): ()
+	_ran = false
+end
+
 return table.freeze(BootSequencer)

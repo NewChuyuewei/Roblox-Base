@@ -66,6 +66,11 @@ local SUITES = {
 			expect(pcall(Contract.Invariant, false, "C", "m") == false, "不变量失败时抛")
 			expect(pcall(Contract.IsA, "s", "string", "C") == true, "IsA 匹配")
 			expect(pcall(Contract.IsA, 1, "string", "C") == false, "IsA 不匹配时抛")
+			-- R26 回归：伪类型 "Instance" 必须认得实例（旧实现用 type()，对实例恒为
+			-- "userdata"，于是 ModuleLoader/HotReload 的 Contract.IsA(x,"Instance") 必然抛错）。
+			-- 用一个带 ClassName 的表即可验证该分支，不需要引擎。
+			expect(pcall(Contract.IsA, { ClassName = "Folder" }, "Instance", "C") == true, "伪类型 Instance 认实例")
+			expect(pcall(Contract.IsA, "not-an-instance", "Instance", "C") == false, "非实例不得通过 Instance 判定")
 
 			-- Interface.Conform（三级上跳 require 真的解析成功了，才可能跑到这里）
 			local spec = { Name = "string", Init = "function" }
