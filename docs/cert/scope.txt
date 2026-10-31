@@ -17,8 +17,6 @@ src/ReplicatedStorage/Deuterium/Core/Foundation/ErrorHandler.luau
 src/ReplicatedStorage/Deuterium/Core/Foundation/Metadata.luau
 src/ReplicatedStorage/Deuterium/Core/Foundation/Context.luau
 src/ReplicatedStorage/Deuterium/Types/Contract/Interface.luau
-src/ReplicatedStorage/Deuterium/Types/Contract/Precondition.luau
-src/ReplicatedStorage/Deuterium/Types/Contract/Invariant.luau
 
 # ---------- Dr 前置件（D0.3，计划）----------
 src/ReplicatedStorage/Deuterium/Collections/Map/HashMap.luau

@@ -140,6 +140,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | R22 | **第三方未审计即集成**（Scribe 38.7k + QuickZone 6.5k 行，无 LICENSE、无 hash） | 极高 | 有代码 require 到它们；或发布时被质证供应链 | `THIRDPARTY.md` §7 五步逐条关闭（顺序：**先剥离再审计**，否则白审一大半）；门禁 10 拦住认证核心的越界依赖 | `THIRDPARTY.md` §7 |
 | R24 | **两边都造一遍**（Scribe 已含 Log/Metrics/Signal/Sched/Transport，我们也规划了同类） | 高 | 出现两套同名能力的实现 | **I21** + `THIRDPARTY.md` §2 所有权表；区分「框架级设施」与「库内部实现」；评审时按表核 | `THIRDPARTY.md` §2 |
 | R25 | **仓库 90% 行数不是我们写的**（5.5k → 50k） | 中 | `git log`/`grep`/评审噪声变大；误把第三方向数当成进度 | 门禁范围已排除两棵树；`loc-budget` 按路径排除并**单独展示**其行数；100k 目标不含它们 | `THIRDPARTY.md` §5 |
+| R26 | **两套形状断言对“类型名”的定义不一致**（`Contract.IsA` 用 `type` → 对实例得 `"userdata"`；`Interface.Conform` 用 `typeof` → 得 `"Part"`） | 中 | 对 Roblox 实例做 `Contract.IsA(x, "Part")` 会**误报失败** | 已写进 `Contract.luau` 注释（含官方文档依据）；待单独立项修（改行为需与重构分开）。当前零调用方 | 风险本条 |
 | R23 | **迁移到 `src/` 后路径引用漂移**（工具、门禁、文档各自写路径） | 中 | 任一门禁找不到文件但仍然通过（如 p0 扫描目录不存在 → 计数为 0 → 假绿） | 扫描类工具必须**断言目录存在**而非静默跳过；本次已核对 p0 计数前后一致（26/47/0） | `scripts/p0-check.sh` |
 
 ## 7. 验收 ID 规范
@@ -159,6 +160,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v12** | **代码优化（用 `code-simplification` skill + context7 MCP）**：① loader 升级为**虚拟实例树**（v1 只能解析同级兄弟 → 认证范围的 `Types/Contract/*` 用三级上跳，**此前无法被任何环境执行**）；② 给认证范围加**首批 headless 断言（22 条）**，CI 的 `test` 从 PASS 1 变 PASS 2；③ `Interface.Conform` 删除冗余 nil 分支（MCP 核实 `typeof(nil)=="nil"`），并修掉与代码不符的头注释（多字段实际不报错）；④ **删掉两个零调用方的死包装** `Types/Contract/{Invariant,Precondition}.luau`（认证范围 -2 文件，`scope.txt` 57→55）—— 认证线要求 100% statement 覆盖，留死代码等于白花验证预算；⑤ 发现并登记 **R26**（`type` vs `typeof` 的不一致缺陷，未修） |
 | **v11** | **决定集成 Scribe 与 QuickZone**（新增 `THIRDPARTY.md`）：实测两库真实 API（**Scribe 不是日志库**，而是玩家数据/复制/经济/排行榜库，自带 ProfileStore）→ 定下**所有权划分表**，`Dr.Data`/`Dr.State` 大幅收缩（`D4.1`/`D4.2`/`D4.7` 取消，改为 5 个适配器）；D2/D2-bis **结案（PlayerState 取消）**；D11 决定集成但审计转为阻塞任务 `D0.6`；新增不变量 **I20/I21**；新增 `D0.6` 与风险 **R24/R25**；**两库不计入 100k 行与 440 模块**（适配器计入） |
 | **v10** | **目录迁移到 `src/ReplicatedStorage/`（用户执行）+ 两个第三方依赖入库**：`scope.txt`（CC1）与全部工具/文档路径重写并逐门禁复验（build 135 ModuleScript · p0 26/47/0 与迁移前一致 · 门禁 10 自检 9/9 · headless PASS 1/SKIP 10 · analyze TypeError 0）。**新增两个阻塞决策**：D11（Scribe/QuickZone 未审计：无 LICENSE、无版本 hash、未剥离、无 Overrides）与 D2-bis（Scribe 实际是玩家数据/复制库，规格写成日志库 — 错了）。新增风险 R22（第三方供应链）与 R23（迁移后路径漂移，含“扫描目录不存在会静默假绿”） |
 | **v9** | **Step 8 完成**：`.gitlab-ci.yml` 四阶段（本地逐条 exit 0）· `tests/run.luau` + `scripts/lune-loader.luau`（headless 测试入口，如实报告 SKIP）· 经 MCP 找到 `luau-lsp.pages.dev` CDN → **vendor** `types/globalTypes.None.d.luau`（指纹入 `MEMORY.md`）→ **首次真跑类型检查：TypeError 0**，并抓到 **1 个真运行时 bug**（`Debug.luau` 双映射导致副本的相对 `require` 指向 `ReplicatedStorage.Logger`）+ 门禁 3 首次全绿 · 新建设 `src/ReplicatedStorage/Debug.luau` 垫片与 `Configs/Deuterium/` 树 |

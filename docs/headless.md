@@ -59,16 +59,26 @@ n=1 时不含"分支行"                                → 插桩能区分取�
 
 ## 4. headless 模块加载（决定测试怎么做）
 
-模块里写的是 `require(script.Parent.X)`，Lune 没有 Roblox 实例树。**已验证可行的 loader**：
+模块里写的是 `require(script.Parent.X)`，Lune 没有 Roblox 实例树。**loader v2（已实测）**：
 
-1. 按**拓扑序**加载（依赖先加载）——这个顺序本来就要算，`Dr.Core.Container.DependencyInjector` 就是干这个的；
+1. 把 `src/ReplicatedStorage/**` **扫成一棵虚拟实例树**（目录 = 可下钻的节点，`.luau` = 模块，`init.luau` = folder-module）；
 2. 每加载一个模块：`loadstring(源码)` → `setfenv(chunk, env)`；
 3. `env` 里：
-   - `script = { Parent = <已加载的兄弟模块表> }`
-   - `require = 恒等函数`（因为 `script.Parent.X` 已经是模块表本身）
+   - `script = { Parent = <所在目录节点> }` → **任意深度的 `Parent` 链都能解析**
+   - `require = 恒等函数`（`script.Parent.X` 求值出来已经是模块表）
    - 显式拷入需要的标准库名字（见 §5 的坑）
+4. 目录节点的 `__index`：`Parent` 返回父节点，子目录返回节点，子模块**按需装载**（带缓存与环检测）。
 
-实测：`Logging` 的四个模块按 `StructuredLog → LogSink → Logger → Debug` 顺序加载成功，并跑通其 `SelfTest`。
+**v1 → v2 的理由（重要）**：v1 只能用「同级兄弟」表，而认证范围的
+`Types/Contract/Interface.luau` 写的是 `script.Parent.Parent.Parent.Core.Foundation.ErrorHandler`
+—— **三级上跳**。于是**那些文件此前从未被任何环境执行过**。
+v2 之后：认证范围的首批 **22 条 headless 断言**已跑通（`tests/run.luau` 的 `certified:` suite），
+CI 的 `test` 阶段从 PASS 1 变为 PASS 2。
+
+实测：`Logging` 四模块 + `Core/Foundation` 三模块 + `Types/Contract/Interface` 均可加载。
+
+> 拓扑序仍是调用方的事：`Loader.chain(dir, order)` 保持旧的显式顺序用法；
+> `Loader.load(filePath)` 则靠虚拟树自动解析依赖（含跨目录上跳）。
 
 ## 5. 两个会咬人的坑
 

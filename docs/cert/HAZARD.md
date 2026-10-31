@@ -93,7 +93,7 @@ A1–A3 不可恢复这一条，正是把 H1/H2/H4 定为 **Major → DAL C** �
 | `Dr.Core.Foundation.Contract` | C | 基础 | **现存** | 15 |
 | `Dr.Core.Foundation.ErrorHandler` ⚠ **需拆分，见 §5.1** | C | 基础 | **现存（违规）** | 60 |
 | `Dr.Core.Foundation.Metadata` · `Context` | C | 基础 | 计划 | 250 |
-| `Dr.Types.Contract.*` | C | 基础 | **现存** | 50 |
+| `Dr.Types.Contract.Interface` | C | 基础 | **现存** | 30 |
 | `Dr.Collections.{Map,Linear,Sorted,Set}` | C | 基础 | 计划 | 600 |
 | `Dr.Memory.{Buffer.ByteBuffer,Pool.ObjectPool,Pool.TablePool}` | C | H1 | 计划 | 400 |
 | `Dr.Concurrency.{Sync.Mutex,Async.AsyncQueue,Scheduling.TaskScheduler}` | C | H2 | 计划 | 400 |
