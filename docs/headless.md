@@ -9,11 +9,13 @@
 
 | 问题 | 结论 |
 | --- | --- |
-| 能否在无 Roblox 的环境跑本仓库的测试？ | **能**（已实测：`Logging` 的 8 个真用例全部通过） |
+| 能否在无 Roblox 的环境跑本仓库的测试？ | **能，而且现在全覆盖**：`tests/run.luau` 结果 **PASS 8 · FAIL 0 · SKIP 0**，59 个用例全跑 |
+| 第一方代码有多少能在 headless 下装载？ | **75/75 = 100%，且不需要引擎桩**（见 §8；本轮起点是 15/75） |
 | 能否用 `debug.sethook` 做行覆盖？ | **不能** —— Lune 0.11.1 **没有 `debug.sethook`** |
 | 覆盖率怎么办？ | **源码插桩 + `loadstring` + `setfenv`**（已端到端跑通），见 §3 |
 | 认证核心的模块还能用 `script.Parent` 吗？ | 能（loader 已解决），但 A 档核心仍**优先构造器注入**，见 §5 |
-| 有没用 Roblox 全局？ | 无。`game` 不存在（探针实测 false），所以任何碰 `game` 的模块在 headless 下必然失败 —— 这正是 I16 的可执行形式 |
+| 有没用 Roblox 全局？ | `game` 不存在（探针实测 false）。碰 `game` 的模块靠 `rbx-stub`（§8）在测试里执行 —— 但**认证核心仍不得依赖引擎**（I16 由门禁 10 强制） |
+| 被登记为 SKIP 的引擎绑定 SelfTest？ | **已全部执行且全部通过（10/10）**，靠 Studio 桩；见 §8 |
 
 **最重要的一件副产品**：把测试跑起来当场找到并修掉了 3 个真 bug（§6）。在这之前 8 个用例从未被任何环境执行过。
 
@@ -117,3 +119,46 @@ CI 的 `test` 阶段从 PASS 1 变为 PASS 2。
 ---
 
 未读/未验证：文本插桩的**完整覆盖率计算**（分母/分子/报告格式）尚未实现 —— 探针只证明了机制可行；多行语句、`--` 出现在字符串中间等边界**没有实测**；loader 的拓扑序目前是手工排列，尚未与 `DependencyInjector` 打通。
+
+---
+
+## 8. v3：让全仓库可执行（2026-10-25 第二/三批）
+
+### 8.1 两个结构性改动：先把“加载期引擎依赖”清零
+
+| 根因 | 影响面 | 修法 |
+| --- | --- | --- |
+| `Debug.luau` 垫片用 `game:GetService` | **19 个模块**（它是 18 个遗留调用点的入口） | 改相对路径：`script.Parent.Deuterium.Diagnostics.Logging.Debug` |
+| `RunContext` 在 require 时就探测 RunService | **12 个模块** | 改为**懒探测一次并缓存**（契约不变：会话内只算一次 + getter 零开销读取；无引擎时保持 false，与旧行为的 pcall 失败一致） |
+| `NetworkManager` 加载期取 ReplicatedStorage | **7 个模块**（整条 Net 链） | 懒取（`local function replicatedStorage()`） |
+| `PhysicsProxy` 加载期取 Workspace | 1 个 | 同上 |
+
+**结果：不加引擎桩可装载 15 → 41 → 68 → 75（满分）。**
+
+### 8.2 `scripts/rbx-stub.luau`：Roblox 全局桩层，让引擎绑定测试真正执行
+
+Lune 缺 `task`/`Instance`/`Vector3`/`Vector2`/`CFrame`/`Color3`/`Enum`/`Random`/`tick`。桩层补上，其中**两处是保真度关键**：
+
+| 要点 | 为什么 |
+| --- | --- |
+| **`typeof` 包装** | 真实 `typeof` 对普通表返回 `"table"`，而代码里到处是 `typeof(v) == "Vector3"` / `"Instance"` 判定。桩值带 `__rbxType` 标记，env 里替换后的 `typeof` 先看标记 —— 否则所有基于 typeof 的校验在桩环境下**假失败** |
+| **`Instance` 是迷你实例树** | `Parent` 赋值要挂进父节点、`FindFirstChild`/`WaitForChild`/`ClearAllChildren` 要能查回来；**`Destroy()` 必须按 Roblox 语义先触发 `Destroying`** —— 否则 `InstanceTracker` 的“Destroy 后自动脱落”用例永远过不了（实跑踩到） |
+| **`GetService` 校验名字** | 真 Roblox 对垃圾名字报错，而 `ServiceLocator` 的 SelfTest 正是断言“空名字必须报错”；桩不报错会让那条用例假失败 |
+
+另：loader 增加 **Studio 桩**（`{engineStub=true, studio=true}` → RunService 的 `IsServer/IsStudio/IsRunMode` 返回 true），让 “Studio-only” 守卫（`Kernel.Reset()` 等）可通过。
+
+**结果：10/10 引擎绑定 SelfTest 既执行又通过**（Container 6/6 · Lifecycle 5/5 · Reflection 6/6 · Net 5/5 · Processing 8/8 · Security 10/10 · Interop 5/5 · Platform 6/6 · Logging 8/8）。
+
+### 8.3 桩的覆盖边界（写在报告里，避免被误读）
+
+桩**不模拟引擎交互语义**（不会真发网络包、不会真做物理）。所以它覆盖的是**逻辑与数据流**，不是引擎交互。`tests/run.luau` 的结果行已改为 `SKIP 0（引擎绑定的 10 个已由 Studio 桩执行）` —— 以前那句“这 10 个未被执行”在启用桩之后就成了**失真陈述**。
+
+### 8.4 本轮新增的三个“会咬人”的事实（都实跑踩到）
+
+| 坑 | 事实 | 后果 |
+| --- | --- | --- |
+| **元方法里不能跨边界 yield** | Lune 的 `fs` 读取会 yield，而**元方法里禁止** yield | `__index` 里调 `resolve`（读文件）→ `attempt to yield across metamethod/C-call boundary`。所以 `__index` 只能纯查表，装载只能发生在 `env.require` / `Loader.load` 这类普通调用里 |
+| **`inProgress` 必须 pcall 清理** | 装载失败时若不清 `inProgress` | 一次失败永久污染后续装载 → 表现为**大面积“假循环依赖”**（实测 Channel→MultiChannel 就是被这个假象耽误过） |
+| **Luau 插值语法是 `{expr}`，不是 `${expr}`** | `${expr}` 里 `$` 是**字面量** | 打印出多余 `$`；全仓库 .luau 里 6 处已修正（含产品代码 `TestContext.note`）。注意 `.sh`/`.yml` 的 `${VAR}` 是 shell 语法，**不能动** |
+
+另有清楚的一个：**`table.freeze` 对已冻结的表会抛错**（非幂等，context7 已核实官方文档）—— 它让 `Configuration.Load()` 对任何“自己冻结 section”的配置模块必然抛错，见提交 `af29cde`。

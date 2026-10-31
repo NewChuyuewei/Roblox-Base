@@ -86,6 +86,16 @@ LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTy
 - `warn` 不存在，loader 必须提供（映射到 `print`）；
 - 日志类对象的方法**必须**是显式 `self` + 冒号调用（无 self 的闭包配冒号会把对象漏进 varargs —— 这个 bug 真的发生过）。
 
+## 5.5 headless 能力现状（2026-10-25 起）
+
+- **第一方 75/75 模块可 headless 装载**（不需要引擎桩）；`tests/run.luau` = **PASS 8 · FAIL 0 · SKIP 0**
+- 引擎绑定的 SelfTest 也能跑：`{ engineStub = true, studio = true }` 启用 `scripts/rbx-stub.luau`
+  （Vector3/Instance/Enum/task/typeof 桩）+ Studio 桩
+- 由此发现的三个真 bug 类别（复現见提交 `af29cde`/`578a8ec`）：
+  加载期引擎依赖、`table.freeze` 对已冻结表抛错、Luau 插值写成 `${expr}`
+
+**新增/改代码时请自问**：这个模块还能在不加引擎桩的情况下被装载吗？做不到就说明它把引擎依赖放到了加载期。
+
 ## 6. 写文件时
 
 1. `--!strict`，模块末尾 `return table.freeze(M)`；
@@ -93,6 +103,9 @@ LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTy
 3. 认证范围文件：每个导出函数头标 `-- LLR-<MOD>-nnn`；
 4. 已知限制写 `shortcut: <限制>, <何时升级>`；
 5. 非平凡逻辑配测试，且**测试必须真的被跑过**（未执行的测试等于注释）。
+6. **Luau 插值语法是 `{expr}`，不是 `${expr}`** —— `${expr}` 里的 `$` 是字面量，会打脏输出
+   （已踩：含产品代码 `TestContext.note`）。另：`table.freeze` 对**已冻结**的表会**抛错**（非幂等），
+   冻结外部传入的表前先 `table.isfrozen` 判一下。
 
 ## 7. 收工动作
 
