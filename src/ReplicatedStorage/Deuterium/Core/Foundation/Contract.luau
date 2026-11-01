@@ -2,12 +2,15 @@
 -- Dr.Core.Foundation.Contract
 -- Declarative contract enforcement: call sites document intent (Precondition vs Invariant),
 -- ErrorHandler gives the failure a stable code.
+--
+-- CERTIFIED (DAL C) — 需求基线：docs/cert/req/CONTRACT.md。
 
 local ErrorHandler = require(script.Parent.ErrorHandler)
 
 local Contract = {}
 
 -- Caller-side contract (precondition of the API you are calling).
+-- LLR-CONTRACT-001
 function Contract.Precondition(cond: boolean, code: string, message: string)
 	if not cond then
 		ErrorHandler.Raise("DR.CONTRACT.PRECONDITION." .. code, message)
@@ -15,6 +18,7 @@ function Contract.Precondition(cond: boolean, code: string, message: string)
 end
 
 -- Internal truth (invariant of our own code).
+-- LLR-CONTRACT-002
 function Contract.Invariant(cond: boolean, code: string, message: string)
 	if not cond then
 		ErrorHandler.Raise("DR.CONTRACT.INVARIANT." .. code, message)
@@ -31,6 +35,7 @@ end
 --
 -- 伪类型 `"Instance"` 表示“任意 Roblox 实例”：typeof 对实例给出的是 ClassName 而不是
 -- "Instance"，所以这个伪名需要单独判定。
+-- LLR-CONTRACT-003
 function Contract.IsA(value: any, kind: string, code: string, message: string?)
 	local valueKind = typeof(value)
 	local actualKind = valueKind

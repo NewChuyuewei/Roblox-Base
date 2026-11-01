@@ -45,9 +45,12 @@ lint:
     - lune run scripts/cert-scope-check.luau
     # 第三方审计（I20 + D11 §7 五步）：版本锁·后门面·可达闭包·只经适配器
     - lune run scripts/thirdparty-audit.luau
+    # 门禁 11（I18/REQ-STD §5）：需求 · 代码 · 用例 四向追溯；同时生成 docs/cert/TRACE.md
+    - lune run scripts/cert-trace-check.luau
     # 门禁必须先证明自己会失败
     - lune run scripts/cert-scope-check.luau --selftest
     - lune run scripts/thirdparty-audit.luau --selftest
+    - lune run scripts/cert-trace-check.luau --selftest
 
 types:
   stage: types
@@ -74,6 +77,18 @@ test:
   script:
     # 只跑能在无引擎环境加载的 SelfTest；引擎相关的会被列为 SKIP 并计数（不是通过）
     - lune run tests/run.luau
+
+# 认证线**单独一个 job**：两条线的报告不得合并（CERT.md §9.2 / STEPS §二点五 规则 2）。
+# 它跑的是 tests/cert/（不 require 任何 SelfTest/TestKit），产物落在 docs/cert/verify/。
+cert:
+  stage: test
+  script:
+    - lune run tests/cert/run.luau
+  artifacts:
+    paths:
+      - docs/cert/TRACE.md
+      - docs/cert/verify/
+    expire_in: 4 weeks
 
 # 保留 GitLab 自带的 SAST（免费的额外信号，与上面的门禁不冲突）
 include:

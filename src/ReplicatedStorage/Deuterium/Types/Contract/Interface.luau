@@ -8,12 +8,15 @@
 -- for host-defined userdata, while type returns "userdata". Both agree on "nil".
 -- NOTE: only the fields listed in `spec` are checked — **extra fields are not rejected**
 -- (asserted as known behaviour in tests/run.luau). The earlier header claimed otherwise.
+--
+-- CERTIFIED (DAL C) — 需求基线：docs/cert/req/INTERFACE.md。
 
 local ErrorHandler = require(script.Parent.Parent.Parent.Core.Foundation.ErrorHandler)
 
 local Interface = {}
 
 -- spec example: { Name = "string", Init = "function" }
+-- LLR-INTERFACE-001
 function Interface.Conform(label: string, value: any, spec: { [string]: string }): boolean
 	assert(type(label) == "string" and #label > 0, "[Dr.Interface] label required")
 	assert(type(value) == "table", `[Dr.Interface] {label}: value must be a table`)

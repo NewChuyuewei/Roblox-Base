@@ -14,12 +14,15 @@
 --   local Logger = require(...Diagnostics.Logging.Logger)
 --   Logger.New("Dr.<Tag>"):warn(ErrorHandler.Render(err))
 -- See docs/cert/HAZARD.md §5.1.
+--
+-- 需求基线：docs/cert/req/ERRORHANDLER.md（CERTIFIED, DAL C）。
 
 local CoreTypes = require(script.Parent.CoreTypes)
 
 local ErrorHandler = {}
 
 -- Build (not throw) a structured error.
+-- LLR-ERRORHANDLER-001
 function ErrorHandler.New(code: string, message: string, source: string?): CoreTypes.DrError
 	assert(type(code) == "string" and #code > 0, "[Dr.ErrorHandler] code required")
 	assert(type(message) == "string" and #message > 0, "[Dr.ErrorHandler] message required")
@@ -31,11 +34,13 @@ function ErrorHandler.New(code: string, message: string, source: string?): CoreT
 end
 
 -- Is the thrown value one of ours?
+-- LLR-ERRORHANDLER-002
 function ErrorHandler.IsDrError(value: any): boolean
 	return type(value) == "table" and type(value.code) == "string" and type(value.message) == "string"
 end
 
 -- Convert anything thrown into a DrError (foreign errors get a synthetic code).
+-- LLR-ERRORHANDLER-003
 function ErrorHandler.Normalize(err: unknown, fallbackCode: string, source: string?): CoreTypes.DrError
 	if ErrorHandler.IsDrError(err) then
 		return err :: CoreTypes.DrError
@@ -45,6 +50,7 @@ end
 
 -- Render any thrown value into a one-line greppable string (test harnesses use this).
 -- DrError tables keep their code; strings pass through; anything else gets tostring'd.
+-- LLR-ERRORHANDLER-004
 function ErrorHandler.Render(err: unknown): string
 	if type(err) == "string" then
 		return err
@@ -57,11 +63,13 @@ function ErrorHandler.Render(err: unknown): string
 end
 
 -- Throw a structured error (typed `never`-ish; intentionally returns any for assert-style use).
+-- LLR-ERRORHANDLER-005
 function ErrorHandler.Raise(code: string, message: string, source: string?): any
 	error(ErrorHandler.New(code, message, source) :: any, 2)
 end
 
 -- try/catch with structured results.
+-- LLR-ERRORHANDLER-006
 function ErrorHandler.Try(fn: () -> (), code: string, source: string?): CoreTypes.Result
 	local err: unknown = nil
 	local ok = xpcall(fn, function(e)
