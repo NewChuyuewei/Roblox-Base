@@ -21,17 +21,35 @@ export type ScribeTransport = {
 	-- framing changes the arithmetic, such as base64 inflating by 4/3.
 	MaxFrameBytes: number?,
 	-- Server
+	--[[
+	Sends a frame to one client.
+	]]
 	SendToClient: (self: any, player: Player, bytes: buffer) -> (),
+	--[[
+	Sends a frame to every client, when supported.
+	]]
 	SendToAllClients: ((self: any, bytes: buffer) -> ())?,
+	--[[
+	Registers the server callback for incoming client frames.
+	]]
 	ListenServer: (self: any, callback: (player: Player, bytes: buffer) -> ()) -> (),
 	-- Client
+	--[[
+	Sends a frame to the server.
+	]]
 	SendToServer: (self: any, bytes: buffer) -> (),
+	--[[
+	Registers the client callback for incoming server frames.
+	]]
 	ListenClient: (self: any, callback: (bytes: buffer) -> ()) -> (),
-	-- Optional. Client.Stop calls it to disconnect what ListenClient connected.
+	--[[
+	Disconnects the client listener when Client.Stop runs.
+	]]
 	Release: ((self: any) -> ())?,
 }
 
 export type LogLevel = "Debug" | "Info" | "Warn" | "Error" | "Fatal"
+export type LogSinkOptions = { Level: LogLevel?, MaxQueued: number? }
 export type LogCategory =
 	"Persistence"
 	| "Replication"
@@ -149,6 +167,7 @@ export type LogCode =
 	| "GRANT_PARTIAL"
 	| "GRANT_SEEDED_ELEMENT"
 	| "RECEIPT_IN_FLIGHT"
+	| "RECEIPT_HISTORY_FULL"
 	| "OWNERSHIP_CHECK_FAIL"
 	| "PASS_PURCHASE_UNCONFIRMED"
 	| "PERK_GRANTED"
@@ -180,6 +199,7 @@ export type LogCode =
 	| "GIFT_CREDIT_UNKNOWN_PRODUCT"
 	| "GIFT_CREDIT_USED"
 	| "GIFT_DELIVERY_RETRY"
+	| "GIFT_INVALID_RECIPIENT"
 	| "GIFT_INTENT_EXPIRED"
 	| "GIFT_INTENT_WRITE_FAIL"
 	| "GIFT_NO_INTENT"
@@ -226,6 +246,8 @@ export type LogCode =
 	| "DYNAMIC_DEFAULT_FAILED"
 	| "LISTENER_ERROR"
 	| "ON_PLAYER_INIT_ERROR"
+	| "ON_PLAYER_INIT_LEDGER"
+	| "PLAYER_LEAVING_HOOK_SLOW"
 	| "SANDBOXED"
 	| "SERVER_STARTED"
 	| "SIM_STATUS"
@@ -244,6 +266,14 @@ export type LogEntry = {
 export type Status = "Healthy" | "Degraded" | "Outage"
 
 export type SessionState = "Loading" | "Ready" | "SessionEnded"
+export type LoadPhase =
+	"WaitingForErase"
+	| "AcquiringSession"
+	| "ReadingProfile"
+	| "Retrying"
+	| "Initializing"
+	| "Importing"
+	| "ImportThrottled"
 
 -- Why a data session ended, or why waiting for data did not produce a tree.
 -- `WaitForData`'s second return, the `SessionEnded` signal and `GetState`'s stored
@@ -291,6 +321,7 @@ export type PurchaseReason =
 	| "insufficient funds"
 	| "paid random items are not available for this account"
 	| "cannot check account settings right now; try again in a moment"
+	| "invalid IdempotencyKey"
 
 -- The fixed refusals of Data.PromptGift. Two more are interpolated (`unknown
 -- product "<name>"` and `purchase prompt failed: <err>`) and cannot be members.
@@ -305,6 +336,7 @@ export type GiftReason =
 	| "invalid recipient"
 	| "cannot gift yourself"
 	| "gift cooldown"
+	| "product retired"
 	| "too many pending gifts"
 	| "data services are experiencing issues; try again later"
 	| "recipient already owns this"
@@ -330,8 +362,17 @@ export type Visibility = "Replicated" | "ServerOnly" | "Shared"
 export type BigScore = {
 	M: number,
 	E: number,
+	--[[
+	Formats the value with a compact suffix.
+	]]
 	Short: (self: any, decimals: number?) -> string,
+	--[[
+	Converts to a Luau number; large values may overflow.
+	]]
 	ToNumber: (self: any) -> number,
+	--[[
+	Returns the base-10 logarithm of a positive value.
+	]]
 	Log10: (self: any) -> number,
 }
 
@@ -343,6 +384,20 @@ export type LeaderboardEntry = {
 	-- so this is not always a number.
 	Score: number | BigScore,
 }
+
+export type LeaderboardStatus = "Starting" | "Healthy" | "Degraded"
+export type LeaderboardStatusInfo = {
+	Status: LeaderboardStatus,
+	PendingWrites: number,
+	RetryingWrites: number,
+	RejectedWrites: number,
+	LastReadAt: number?,
+	ReadAge: number?,
+	LastWriteAt: number?,
+	LastReadError: string?,
+	LastWriteError: string?,
+}
+export type LeaderboardSnapshotEntry = LeaderboardStatusInfo & { BundleId: number, Name: string }
 
 export type LeaderboardConfig = {
 	Stat: string,
@@ -369,7 +424,8 @@ export type PassConfig = {
 }
 
 export type PurchaseSpec = {
-	Cost: { Path: string, Amount: number },
+	-- Strings and Big amounts require a Big currency.
+	Cost: { Path: string, Amount: number | string | { M: number, E: number } },
 	Category: string?,
 	ItemId: string,
 	Grant: ((data: any) -> ())?,

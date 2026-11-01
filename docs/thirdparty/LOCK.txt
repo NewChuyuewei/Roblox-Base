@@ -1,0 +1,4 @@
+# 第三方依赖锁（漂移检测）—— 有意升级上游后跑 --write-lock 重建。
+
+Scribe v2.6.1 files=46 loc=42077 bytes=1545868 hash=3d797da3
+QuickZone v1.5.1 files=13 loc=6534 bytes=165495 hash=9babdda8

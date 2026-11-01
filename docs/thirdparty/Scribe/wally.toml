@@ -1,0 +1,18 @@
+[package]
+name = "ericplane/scribe"
+description = "Persistent, fully-typed, automatically-replicated player data for Roblox Luau, built on ProfileStore."
+version = "2.6.1"
+license = "MIT"
+authors = ["ericplane"]
+registry = "https://github.com/UpliftGames/wally-index"
+homepage = "https://ericplane.github.io/Scribe/"
+repository = "https://github.com/ericplane/Scribe"
+realm = "shared"
+
+include = ["src", "src/*", "licenses", "licenses/*", "default.project.json", "wally.toml", "LICENSE", "NOTICE", "README.md", "Scribe-source-map.json"]
+exclude = ["**"]
+
+[dev-dependencies]
+Jest = "roblox/jest@=3.20.1"
+JestGlobals = "roblox/jest-globals@=3.20.1"
+Promise = "roblox/promise@=3.5.2"

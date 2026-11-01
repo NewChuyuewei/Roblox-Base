@@ -43,8 +43,11 @@ lint:
     - bash scripts/p0-check.sh
     # 门禁 10（I16）：认证范围不得触碰引擎/网络/非认证层，且依赖必须在范围内
     - lune run scripts/cert-scope-check.luau
+    # 第三方审计（I20 + D11 §7 五步）：版本锁·后门面·可达闭包·只经适配器
+    - lune run scripts/thirdparty-audit.luau
     # 门禁必须先证明自己会失败
     - lune run scripts/cert-scope-check.luau --selftest
+    - lune run scripts/thirdparty-audit.luau --selftest
 
 types:
   stage: types

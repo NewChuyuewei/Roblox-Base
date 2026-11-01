@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
 local Internal = script.Parent.Parent.Internal
+local Types = require(script.Parent.Parent.Types)
 local Util = require(Internal.Util)
 local Node = require(Internal.Node)
 local Template = require(Internal.Template)
@@ -26,6 +27,9 @@ local Budget = require(Internal.Budget)
 local Rng = require(Internal.Rng)
 
 local Persistence = {}
+
+-- Wipe-guard summary of `_Scribe`.
+type LedgerShape = { Present: { [string]: true }, Version: number? }
 
 export type Entry = {
 	Player: Player,
@@ -60,6 +64,7 @@ export type Entry = {
 	TimedLive: { [string]: number }?, -- same table, read by Timed's own store lookup
 	TimedSaves: number?, -- open save windows; saves are not serialized per profile
 	LeavingHookRan: boolean?, -- OnPlayerLeaving fires at most once per session
+	StopLeavingHookWatchdog: (() -> ())?,
 	-- Cross-server messages handed to Data.OnMessage whose FireTracked has not settled.
 	-- Nonzero at session end means a handler never returned; teardown reports it.
 	UnsettledMessages: number?,
@@ -68,6 +73,10 @@ export type Entry = {
 	-- Top-level keys of the last successful save. The wipe guard's baseline, kept
 	-- here so the store does not have to keep a second copy of the whole profile.
 	LastSavedKeys: { [string]: true }?,
+	-- Ledger shape from the same save as LastSavedKeys.
+	LastSavedLedger: LedgerShape?,
+	-- Intentional OnPlayerInit removals, cleared after a successful unblocked save.
+	InitRemovedKeys: { [string]: true }?,
 	LiveSize: number?, -- approx bytes measured at the start of the last save attempt
 	SizeWarned: boolean,
 	TornDown: boolean,
@@ -87,6 +96,11 @@ export type Entry = {
 	-- broken transport cannot cost one encode per frame.
 	ResyncPending: boolean?,
 	LastResyncAt: number?,
+	-- Failed snapshot: stop holding replies until one lands.
+	ResyncFailed: boolean?,
+	-- Replies waiting for a repair snapshot, with their earliest release deadline.
+	HeldReplies: { buffer }?,
+	HeldDeadline: number?,
 	Queue: { any },
 	QueueIndex: { [string]: number },
 	SharedQueue: { any },
@@ -109,11 +123,13 @@ export type Entry = {
 	LastRateLimitLog: number?, -- os.clock of the last emitted COMMAND_RATE_LIMITED
 	-- Why the store last failed for this key. StartSessionAsync answers nil with no reason
 	-- of its own, so this is the only way a load failure can tell a throttle apart.
-	LastStoreErrorClass: Failure.Class?,
+	LastStoreErrorThrottled: boolean?,
 	LastStoreErrorAt: number?, -- monotonic
 	-- A parallel field, not a fourth State, so nothing switching on State changes
 	-- meaning. nil once Ready.
-	LoadPhase: ("Importing" | "ImportThrottled")?,
+	LoadPhase: Types.LoadPhase?,
+	SlowLoadWarned: boolean?,
+	StopLoadWatchdog: (() -> ())?,
 	-- Monetization state
 	GiftLastAt: number,
 	OwnsLast: { [string]: boolean }?, -- last reported effective ownership, for change detection
@@ -124,6 +140,7 @@ local SIZE_WARN_BYTES = 3.5 * 1024 * 1024 -- warn approaching the ~4 MB DataStor
 -- Past this a join is something the player notices. Well under LoadTimeout, where they
 -- are kicked: a warn firing only at the timeout would only ever report failures.
 local SLOW_LOAD_SECONDS = 10
+local SLOW_LEAVING_HOOK_SECONDS = 10
 -- An import is unbounded by design and holds the session lock throughout. Well past
 -- SLOW_LOAD, because waiting on budget is the point.
 local SLOW_IMPORT_SECONDS = 30
@@ -144,6 +161,8 @@ local WIPE_GUARD_RATIO_DEFAULT = 0.6 -- a profile shrinking past 60% looks like 
 -- Matches the store's ASSUME_DEAD. Its own constant rather than read from the module,
 -- so the operator paths behave identically against an injected store that lacks it.
 local ASSUME_DEAD_SECONDS = 630
+-- Two intervals leave 30 seconds before ASSUME_DEAD_SECONDS after one failed save.
+local MAX_SAVE_INTERVAL = 300
 
 -- Share of the shutdown budget the OnPlayerLeaving phase may spend. Hooks come first
 -- because their writes are the only thing here that cannot be rebuilt; the remainder
@@ -151,45 +170,18 @@ local ASSUME_DEAD_SECONDS = 630
 local HOOK_PHASE_SHARE = 0.75
 local HOOK_JOIN_POLL = 0.05 -- seconds between checks that the parked hooks have returned
 
---- A copy of the exchange ledger, for comparing across a hook that writes raw.
----
---- OnPlayerInit and Scribe.Dynamic factories are handed `profile.Data` DIRECTLY, before
---- the tree exists, so the accessor refusal that protects the reserved root has nothing
---- to refuse through. A starter kit that clears `_Scribe` to "start clean" would destroy
---- an in-flight exchange with no report at all.
-local function exchangeSnapshot(data: any): any
-	local reserved = if type(data) == "table" then data[Template.RESERVED_ROOT] else nil
-	if type(reserved) ~= "table" then
-		return nil
+local function watchdog(seconds: number, callback: () -> ()): () -> ()
+	local pending: (() -> ())? = callback
+	Clock.Delay(seconds, function()
+		local run = pending
+		pending = nil
+		if run then
+			run()
+		end
+	end)
+	return function()
+		pending = nil -- release the entry without cancelling a game callback
 	end
-	return {
-		Exchange = if type(reserved.Exchange) == "table" then Util.deepClone(reserved.Exchange) else nil,
-		ExchangeInbox = if type(reserved.ExchangeInbox) == "table" then Util.deepClone(reserved.ExchangeInbox) else nil,
-	}
-end
-
---- Deep equality over two exchange snapshots, tolerating either side being absent.
-local function sameExchangeState(a: any, b: any): boolean
-	local function eq(x: any, y: any): boolean
-		if type(x) ~= type(y) then
-			return false
-		end
-		if type(x) ~= "table" then
-			return x == y
-		end
-		for key, value in x do
-			if not eq(value, y[key]) then
-				return false
-			end
-		end
-		for key in y do
-			if x[key] == nil then
-				return false
-			end
-		end
-		return true
-	end
-	return eq(a, b)
 end
 
 --- Does this stored profile hold exchange state that a wipe or a rollback would split?
@@ -319,11 +311,7 @@ function Persistence.new(ctx: any)
 	local THROTTLE_ATTRIBUTION_WINDOW = 15
 	local function loadKickText(entry: Entry): string
 		local at = entry.LastStoreErrorAt
-		if
-			entry.LastStoreErrorClass == "Throttled"
-			and at ~= nil
-			and (Clock.Monotonic() - at) <= THROTTLE_ATTRIBUTION_WINDOW
-		then
+		if entry.LastStoreErrorThrottled and at ~= nil and (Clock.Monotonic() - at) <= THROTTLE_ATTRIBUTION_WINDOW then
 			return kickText("RateLimited")
 		end
 		return kickText("Load")
@@ -441,6 +429,17 @@ function Persistence.new(ctx: any)
 				{ Requested = interval, Applied = MIN_SAVE_INTERVAL }
 			)
 			interval = MIN_SAVE_INTERVAL
+		end
+		-- Leave room for one failed save before the session appears dead.
+		if interval > MAX_SAVE_INTERVAL then
+			Log.Warn(
+				"Persistence",
+				"SAVE_INTERVAL_CLAMPED",
+				`autosave interval above the {MAX_SAVE_INTERVAL}s ceiling (one failed save must stay under the `
+					.. `{ASSUME_DEAD_SECONDS}s after which another server takes a silent session); clamping`,
+				{ Requested = interval, Applied = MAX_SAVE_INTERVAL }
+			)
+			interval = MAX_SAVE_INTERVAL
 		end
 		-- Two bundles asking for different cadences is a real conflict; unreported it
 		-- resolves as last-writer-wins, with the winner decided by require order.
@@ -566,7 +565,7 @@ function Persistence.new(ctx: any)
 					if entry.Key == profileKey then
 						-- Outside the in-flight guard: a load has no save on the wire, and
 						-- the load path is what needs the distinction. Dies with the entry.
-						entry.LastStoreErrorClass = class
+						entry.LastStoreErrorThrottled = Failure.IsThrottleLike(message)
 						entry.LastStoreErrorAt = Clock.Monotonic()
 					end
 					if entry.Key == profileKey and entry.SavesInFlight > 0 then
@@ -685,14 +684,39 @@ function Persistence.new(ctx: any)
 		return self.EntriesByUserId[userId]
 	end
 
+	local function warnSlowLoad(entry: Entry)
+		if self.Stopped or entry.SlowLoadWarned or entry.State ~= "Loading" or entry.JoinedAt == nil then
+			return
+		end
+		local duration = Clock.Monotonic() - entry.JoinedAt
+		if duration < SLOW_LOAD_SECONDS then
+			return
+		end
+		entry.SlowLoadWarned = true
+		Log.Warn("Persistence", "SLOW_LOAD", "profile load exceeded 10s; inspect its phase and store errors", {
+			Player = entry.Player,
+			UserId = entry.UserId,
+			Phase = entry.LoadPhase or "Initializing",
+			Duration = duration,
+		})
+	end
+
 	local function setState(entry: Entry, state: "Loading" | "Ready" | "SessionEnded", reason: string?)
+		if state ~= "Loading" then
+			warnSlowLoad(entry)
+			if entry.StopLoadWatchdog then
+				entry.StopLoadWatchdog()
+				entry.StopLoadWatchdog = nil
+			end
+			entry.LoadPhase = nil
+		end
 		entry.State = state
 		entry.FailReason = reason
 		entry.StateChanged:Fire(state, reason)
 	end
 
 	--- Fires StateChanged so a WaitForData caller wakes on the transition.
-	local function setPhase(entry: Entry, phase: ("Importing" | "ImportThrottled")?)
+	local function setPhase(entry: Entry, phase: Types.LoadPhase?)
 		if entry.LoadPhase == phase then
 			return
 		end
@@ -759,7 +783,7 @@ function Persistence.new(ctx: any)
 
 	function self.UpdateSaveInfoMirror(entry: Entry)
 		if entry.Tree and not entry.Tree.Dead then
-			local accessor = entry.Tree.Accessor[Template.SESSION_ROOT].SaveInfo
+			local accessor = entry.Tree.ReservedSession.SaveInfo
 			accessor.Set({
 				LastSaveAt = entry.SaveInfo.LastSaveAt,
 				LastResult = entry.SaveInfo.LastResult,
@@ -915,6 +939,62 @@ function Persistence.new(ctx: any)
 		end
 	end
 
+	-- Guard declared ledger parts even on small profiles. Obsolete keys may be removed.
+	local ledgerChildren: { string } = {}
+	do
+		local rootChildren = playerCompiled.Root.Children
+		local reservedSchema = if rootChildren then rootChildren[Template.RESERVED_ROOT] else nil
+		for key in (if reservedSchema then reservedSchema.Children else nil) or {} do
+			table.insert(ledgerChildren, key)
+		end
+		table.sort(ledgerChildren)
+	end
+
+	-- Every ledger part is a table except Version.
+	local function keptShape(key: string, value: any): boolean
+		return type(value) == (if key == "Version" then "number" else "table")
+	end
+
+	-- Ignore malformed parts so repairing them does not count as data loss.
+	local function ledgerShape(data: any): LedgerShape?
+		local reserved = if type(data) == "table" then data[Template.RESERVED_ROOT] else nil
+		if type(reserved) ~= "table" then
+			return nil
+		end
+		local present: { [string]: true } = {}
+		for _, key in ledgerChildren do
+			if keptShape(key, reserved[key]) then
+				present[key] = true
+			end
+		end
+		return { Present = present, Version = if type(reserved.Version) == "number" then reserved.Version else nil }
+	end
+
+	-- Detect lost ledger parts or a schema version that went backwards.
+	local function ledgerLoss(before: LedgerShape?, live: { [string]: any }): string?
+		if before == nil then
+			return nil
+		end
+		local reserved = live[Template.RESERVED_ROOT]
+		if type(reserved) ~= "table" then
+			return `"{Template.RESERVED_ROOT}" is no longer a table`
+		end
+		local missing = {}
+		for _, key in ledgerChildren do
+			if before.Present[key] and not keptShape(key, reserved[key]) then
+				table.insert(missing, `{Template.RESERVED_ROOT}.{key}`)
+			end
+		end
+		if #missing > 0 then
+			return `ledger entries vanished or replaced: {table.concat(missing, ", ")}`
+		end
+		local version = reserved.Version
+		if before.Version ~= nil and (type(version) ~= "number" or version < before.Version) then
+			return `ledger schema Version went backwards: {before.Version} -> {tostring(version)}`
+		end
+		return nil
+	end
+
 	-- Wipe guard: compare against the last successful save. `liveSize` is passed in
 	-- because onProfileSaving measures the same table in the same synchronous frame.
 	local function wipeGuardCheck(entry: Entry, liveSize: number?): (boolean, string?)
@@ -928,6 +1008,7 @@ function Persistence.new(ctx: any)
 		-- the two cases the summary cannot be: before the first save of a session, and
 		-- under WipeGuardPolicy = "Block", which writes those bytes back as the payload.
 		local keys: any = entry.LastSavedKeys
+		local ledger = entry.LastSavedLedger
 		local oldSize = entry.LastSavedSize
 		if keys == nil then
 			local lastSaved = profile.LastSavedData
@@ -935,16 +1016,22 @@ function Persistence.new(ctx: any)
 				return false, nil
 			end
 			keys = lastSaved
+			ledger = ledgerShape(lastSaved)
 			oldSize = oldSize or Util.approxSize(lastSaved)
 		end
 		local missing = {}
+		local removedByInit = entry.InitRemovedKeys
 		for key in keys do
-			if live[key] == nil then
+			if live[key] == nil and not (removedByInit and removedByInit[key]) then
 				table.insert(missing, tostring(key))
 			end
 		end
 		if #missing > 0 then
 			return true, `top-level keys vanished: {table.concat(missing, ", ")}`
+		end
+		local lost = ledgerLoss(ledger, live)
+		if lost ~= nil then
+			return true, lost
 		end
 		local ratio = wipeGuardRatio
 		local newSize = liveSize or Util.approxSize(live)
@@ -1056,6 +1143,24 @@ function Persistence.new(ctx: any)
 		end
 	end
 
+	-- Use the saved payload: a blocked save persists the last-good snapshot, not live data.
+	local function recordSavedBaseline(entry: Entry, lastSavedData: any): number?
+		local size = Util.approxSize(lastSavedData)
+		if size then
+			entry.LastSavedSize = size
+			entry.LiveSize = size
+		end
+		if type(lastSavedData) == "table" then
+			local keys: { [string]: true } = {}
+			for key in lastSavedData do
+				keys[key :: string] = true
+			end
+			entry.LastSavedKeys = keys
+			entry.LastSavedLedger = ledgerShape(lastSavedData)
+		end
+		return size
+	end
+
 	local function onProfileSaved(entry: Entry, lastSavedData: any)
 		-- ProfileStore fires OnAfterSave even when the session was STOLEN and nothing
 		-- local persisted. Skip the success bookkeeping only for steals: a
@@ -1075,6 +1180,7 @@ function Persistence.new(ctx: any)
 		-- migrated shape; the one-time post-migration skip is complete.
 		if not entry.Blocked then
 			entry.WipeGuardRebaselinePending = false
+			entry.InitRemovedKeys = nil
 		end
 		Metrics.Add("SavesOk")
 		if duration then
@@ -1083,23 +1189,9 @@ function Persistence.new(ctx: any)
 		Health.ReportSuccess("Saves")
 		ctx.Signals.OnSave:Fire({ Player = entry.Player, Ok = true, Duration = duration, At = Clock.Now() })
 
-		-- Record the size that actually persisted (the warning + anomaly are owned by
-		-- the pre-save check in onProfileSaving, which also fires when a save fails).
-		local size = Util.approxSize(lastSavedData)
+		local size = recordSavedBaseline(entry, lastSavedData)
 		if size then
-			entry.LastSavedSize = size
-			entry.LiveSize = size
 			Metrics.Observe("ProfileSize", size)
-		end
-		-- The other half of the wipe guard's baseline, from the payload that actually
-		-- persisted rather than from live data: a blocked save stores the last-good
-		-- snapshot, and the baseline has to describe what is on the key.
-		if type(lastSavedData) == "table" then
-			local keys: { [string]: true } = {}
-			for key in lastSavedData do
-				keys[key :: string] = true
-			end
-			entry.LastSavedKeys = keys
 		end
 
 		self.UpdateSaveInfoMirror(entry)
@@ -1266,7 +1358,7 @@ function Persistence.new(ctx: any)
 					"MIGRATION_RESERVED_DISCARDED",
 					`a migration step changed the reserved "{Template.RESERVED_ROOT}" root; the change was DISCARDED `
 						.. `and the stored reserved state kept (it is library-owned: receipt dedupe, gift escrow, `
-						.. `perks, purchase logs, Timed) -- migrate your own keys only`,
+						.. `gift credits, perks, purchase logs, Timed) -- migrate your own keys only`,
 					{ Player = entry.Player, Path = Template.RESERVED_ROOT, Stored = stored, Current = currentVersion }
 				)
 			end
@@ -1325,23 +1417,29 @@ function Persistence.new(ctx: any)
 		entry.LiveData = profile.Data
 		entry.SessionStore = Template.BuildDefaults(playerCompiled, "Session")
 
+		-- Persistent writes dirty the profile even when replication is disabled.
+		local function markWritten(op: Node.Op, schema: Template.SchemaNode?)
+			local persists = if schema then schema.Persist else Template.PersistOf(compiled, op.Path)
+			if persists and not entry.SaveInfo.Dirty then
+				entry.SaveInfo.Dirty = true
+				Sched.Defer(function()
+					if entry.Tree and not entry.Tree.Dead and entry.SaveInfo.Dirty then
+						self.UpdateSaveInfoMirror(entry)
+					end
+				end)
+			end
+		end
+
 		entry.Tree = Node.NewTree({
 			Compiled = playerCompiled,
 			Stores = { Persist = profile.Data, Session = entry.SessionStore },
 			IsServer = true,
 			Label = entry.Player.Name,
 			OnOp = function(op: Node.Op, schema: Template.SchemaNode?)
-				local persists = if schema then schema.Persist else Template.PersistOf(compiled, op.Path)
-				if persists and not entry.SaveInfo.Dirty then
-					entry.SaveInfo.Dirty = true
-					Sched.Defer(function()
-						if entry.Tree and not entry.Tree.Dead and entry.SaveInfo.Dirty then
-							self.UpdateSaveInfoMirror(entry)
-						end
-					end)
-				end
+				markWritten(op, schema)
 				ctx.Replication.PushOp(entry, op, schema)
 			end,
+			OnUnreplicatedOp = markWritten,
 			OnAnomaly = function(path, value, reason)
 				Metrics.Add("Anomalies")
 				Log.Warn("Integrity", "ANOMALY", `implausible write at "{Util.pathString(path)}": {reason}`, {
@@ -1390,7 +1488,28 @@ function Persistence.new(ctx: any)
 		if entry.State ~= "Ready" or entry.Tree == nil then
 			return -- never loaded, so there is nothing coherent to hand it
 		end
+		local started = Clock.Monotonic()
+		local warned = false
+		local function warnSlowHook()
+			local duration = Clock.Monotonic() - started
+			if self.Stopped or warned or duration < SLOW_LEAVING_HOOK_SECONDS then
+				return
+			end
+			warned = true
+			Log.Warn("Lifecycle", "PLAYER_LEAVING_HOOK_SLOW", "OnPlayerLeaving exceeded 10s before the final save", {
+				Player = entry.Player,
+				UserId = entry.UserId,
+				Reason = reason,
+				Duration = duration,
+			})
+		end
+		local stopWatchdog = watchdog(SLOW_LEAVING_HOOK_SECONDS, warnSlowHook)
+		entry.StopLeavingHookWatchdog = stopWatchdog
 		local ok, err = pcall(hook, entry.Player, entry.Tree.Accessor, reason)
+		stopWatchdog()
+		entry.StopLeavingHookWatchdog = nil
+		Metrics.Observe("PlayerLeavingHookDuration", Clock.Monotonic() - started)
+		warnSlowHook()
 		if not ok then
 			Log.Error(
 				"Lifecycle",
@@ -1406,6 +1525,10 @@ function Persistence.new(ctx: any)
 			return
 		end
 		entry.TornDown = true
+		if entry.StopLeavingHookWatchdog then
+			entry.StopLeavingHookWatchdog()
+			entry.StopLeavingHookWatchdog = nil
+		end
 		-- One canonical reason reaches every consumer: the SessionEnded signal, the stored
 		-- end reason, and WaitForData's second return (see Types.LifecycleReason).
 		local canonical: string = reason or "session-ended"
@@ -1434,11 +1557,26 @@ function Persistence.new(ctx: any)
 		ctx.Signals.SessionEnded:Fire(entry.Player, canonical)
 		setState(entry, "SessionEnded", canonical)
 
-		ctx.Replication.OnEntryRemoved(entry)
-		ctx.Leaderboards.OnUnload(entry)
-		ctx.Monetization.OnUnload(entry)
-		ctx.Timed.OnUnload(entry)
-		ctx.Exchanges.OnUnload(entry)
+		-- One failed hook must not skip the rest of teardown.
+		for _, step in
+			{
+				{ "Replication", ctx.Replication.OnEntryRemoved },
+				{ "Leaderboards", ctx.Leaderboards.OnUnload },
+				{ "Monetization", ctx.Monetization.OnUnload },
+				{ "Timed", ctx.Timed.OnUnload },
+				{ "Exchanges", ctx.Exchanges.OnUnload },
+			} :: { { any } }
+		do
+			local ok, err = pcall(step[2], entry)
+			if not ok then
+				Log.Error(
+					"Lifecycle",
+					"SUBSYSTEM_HOOK_ERROR",
+					`{step[1]} unload hook failed: {tostring(err)}`,
+					{ Player = entry.Player }
+				)
+			end
+		end
 
 		if entry.Tree then
 			entry.Tree:Destroy()
@@ -1478,6 +1616,17 @@ function Persistence.new(ctx: any)
 	local function finishLoad(entry: Entry)
 		local profile = entry.Profile :: any
 		local player = entry.Player
+
+		-- Hooks may yield into a save before normal bookkeeping starts. Keep its baseline
+		-- and mark it uncounted so settling it cannot decrement a later save's count.
+		local earlyOnSave = profile.OnSave:Connect(function(saveContext: any)
+			if type(saveContext) == "table" then
+				saveContext.ScribeUncounted = true
+			end
+		end)
+		local earlyAfterSave = profile.OnAfterSave:Connect(function(lastSavedData: any)
+			recordSavedBaseline(entry, lastSavedData)
+		end)
 
 		-- Marked for erasure: release without saving.
 		local markedReserved = if type(profile.Data) == "table" then profile.Data[Template.RESERVED_ROOT] else nil
@@ -1552,7 +1701,7 @@ function Persistence.new(ctx: any)
 				return debug.traceback(tostring(e), 2)
 			end, player, entry.UserId, migrationContext(entry))
 			releaseSlot()
-			setPhase(entry, nil)
+			setPhase(entry, "Initializing")
 			local importSeconds = Clock.Monotonic() - importStarted
 			if importSeconds >= SLOW_IMPORT_SECONDS then
 				-- Without this, "waiting on budget" and "hung" look identical in the log.
@@ -1929,7 +2078,7 @@ function Persistence.new(ctx: any)
 		end
 
 		if ctx.DevMode then
-			local unknown = Template.UnknownRootKeys(compiled, profile.Data)
+			local unknown = Template.UnknownRootKeys(playerCompiled, profile.Data)
 			if #unknown > 0 then
 				Log.Warn(
 					"Persistence",
@@ -1944,9 +2093,6 @@ function Persistence.new(ctx: any)
 			end
 		end
 
-		-- Taken before BOTH hooks: Dynamic factories run above this point too.
-		local exchangeStateBefore = exchangeSnapshot(profile.Data)
-
 		if options.OnPlayerInit then
 			-- A brand-new profile, a ResetData wipe, or a first-session crash recovery all
 			-- mean "no prior saved data", which is what starter kits need. An IMPORTED
@@ -1956,29 +2102,49 @@ function Persistence.new(ctx: any)
 			-- ImportLegacyData only fires for a player who has never saved, so a game
 			-- already on Scribe finishes moving stores here instead. NOT behind the import
 			-- cap: this runs on every join, and serialising those throttles ordinary logins.
+			-- Hide the ledger from the hook but keep it in profile.Data for saves during yields.
+			-- Nested edits stay live; fold top-level edits before saves and on return.
+			local data = profile.Data
+			local view = table.clone(data)
+			view[Template.RESERVED_ROOT] = nil
+			local keysBefore = table.clone(view)
+			local function foldView()
+				for key in data do
+					if key ~= Template.RESERVED_ROOT and view[key] == nil then
+						data[key] = nil
+					end
+				end
+				for key, value in view do
+					if key ~= Template.RESERVED_ROOT then
+						data[key] = value
+					end
+				end
+			end
+			-- Include edits made before a yielding hook's autosave or final save.
+			local foldOnSave = profile.OnSave:Connect(foldView)
 			Util.safeCall(function(err)
 				Log.Error("Lifecycle", "ON_PLAYER_INIT_ERROR", err, { Player = player })
-			end, options.OnPlayerInit, player, profile.Data, isNewProfile, migrationContext(entry))
-		end
-
-		-- REVERTED rather than merely reported: a half-edited exchange record is worse than
-		-- either the original or a clean one, and the original is still in hand.
-		if exchangeStateBefore ~= nil or exchangeSnapshot(profile.Data) ~= nil then
-			local after = exchangeSnapshot(profile.Data)
-			if not sameExchangeState(exchangeStateBefore, after) then
-				local reserved = profile.Data[Template.RESERVED_ROOT]
-				if type(reserved) == "table" then
-					reserved.Exchange = if exchangeStateBefore then exchangeStateBefore.Exchange else {}
-					reserved.ExchangeInbox = if exchangeStateBefore then exchangeStateBefore.ExchangeInbox else {}
-				end
+			end, options.OnPlayerInit, player, view, isNewProfile, migrationContext(entry))
+			foldOnSave:Disconnect()
+			if view[Template.RESERVED_ROOT] ~= nil then
+				view[Template.RESERVED_ROOT] = nil
 				Log.Error(
 					"Lifecycle",
-					"EXCHANGE_INIT_TAMPER",
-					"OnPlayerInit or a Scribe.Dynamic factory changed the in-flight exchange ledger under "
-						.. `"{Template.RESERVED_ROOT}"; the change has been reverted. That state is Scribe's, `
-						.. "and editing it can duplicate or destroy an exchange in progress",
+					"ON_PLAYER_INIT_LEDGER",
+					`OnPlayerInit assigned "{Template.RESERVED_ROOT}", which its data table leaves out; the `
+						.. "assignment was discarded and Scribe's ledger kept. That root holds receipt ids, perks "
+						.. "and gift credits, and is changed only through the APIs that own it",
 					{ Player = player }
 				)
+			end
+			foldView()
+			-- Exempt intentional removals from the first save's missing-key check.
+			for key in keysBefore do
+				if data[key] == nil then
+					local removed = entry.InitRemovedKeys or {}
+					removed[key] = true
+					entry.InitRemovedKeys = removed
+				end
 			end
 		end
 
@@ -2013,6 +2179,8 @@ function Persistence.new(ctx: any)
 			)
 		end
 
+		earlyOnSave:Disconnect()
+		earlyAfterSave:Disconnect()
 		profile.OnSave:Connect(function(saveContext: any)
 			-- Point the profile at a copy holding online-only cooldowns in their persisted
 			-- form and keep the live deadlines aside. OnSave fires before the store reads
@@ -2029,6 +2197,10 @@ function Persistence.new(ctx: any)
 		-- session ends, by which time teardown has detached this entry from Entries.
 		if type((profile :: any).OnSettled) == "table" then
 			(profile :: any).OnSettled:Connect(function(saveContext: any)
+				-- Early saves were never counted.
+				if type(saveContext) == "table" and saveContext.ScribeUncounted then
+					return
+				end
 				entry.SavesInFlight = math.max(0, entry.SavesInFlight - 1)
 				if entry.SavesInFlight == 0 then
 					entry.SaveT0 = nil
@@ -2116,14 +2288,6 @@ function Persistence.new(ctx: any)
 		local loadSeconds = if entry.JoinedAt then Clock.Monotonic() - entry.JoinedAt else nil
 		if loadSeconds then
 			Metrics.Observe("LoadDuration", loadSeconds)
-			if loadSeconds >= SLOW_LOAD_SECONDS then
-				Log.Warn(
-					"Persistence",
-					"SLOW_LOAD",
-					`profile took {string.format("%.1f", loadSeconds)}s to load, past the {SLOW_LOAD_SECONDS}s mark`,
-					{ Player = player }
-				)
-			end
 		end
 		Log.Info("Persistence", "PROFILE_LOADED", "profile session started", {
 			Player = player,
@@ -2211,13 +2375,17 @@ function Persistence.new(ctx: any)
 		local player = entry.Player
 
 		if mode == "NoSave" then
+			setPhase(entry, "ReadingProfile")
 			-- Snapshot of the real profile with NO session: nothing is saved, because
 			-- a view is never IsActive() and every save path checks that first.
+			local started = Clock.Monotonic()
 			local ok, profile = pcall(function()
 				return store:GetAsync(entry.Key)
 			end)
+			Metrics.Observe("ProfileLoadDuration", Clock.Monotonic() - started)
 			if ok and profile then
 				entry.Profile = profile
+				setPhase(entry, "Initializing")
 				finishLoad(entry)
 			else
 				Log.Error(
@@ -2233,6 +2401,7 @@ function Persistence.new(ctx: any)
 
 		local heldSince = Clock.Monotonic()
 		while (erasing[entry.UserId] or 0) > 0 and not entry.TornDown and not self.Stopped do
+			setPhase(entry, "WaitingForErase")
 			if Clock.Monotonic() - heldSince >= eraseJoinTimeout then
 				if player.Parent == Players then
 					player:Kick(kickText("Erasing"))
@@ -2246,10 +2415,12 @@ function Persistence.new(ctx: any)
 		local attempt = 0
 		while not self.Closing and not self.Stopped do
 			attempt += 1
+			setPhase(entry, "AcquiringSession")
 			-- Captured PER ATTEMPT. ProfileStore latches the first `true` its Cancel
 			-- returns and never asks again, so a deadline computed once outside this loop
 			-- would abort every later attempt the instant it began.
 			local deadline = Clock.Monotonic() + loadTimeout
+			local started = Clock.Monotonic()
 			local ok, profile = pcall(function()
 				return store:StartSessionAsync(entry.Key, {
 					Cancel = function()
@@ -2260,6 +2431,7 @@ function Persistence.new(ctx: any)
 					end,
 				})
 			end)
+			Metrics.Observe("ProfileLoadDuration", Clock.Monotonic() - started)
 
 			if entry.TornDown then
 				-- Torn down while the load was in flight (shutdown drain or a leave
@@ -2282,6 +2454,7 @@ function Persistence.new(ctx: any)
 			if ok and profile then
 				entry.Profile = profile
 				Health.ReportSuccess("ProfileLoad")
+				setPhase(entry, "Initializing")
 				finishLoad(entry)
 				return
 			end
@@ -2318,6 +2491,7 @@ function Persistence.new(ctx: any)
 			-- "Wait": stay in Loading and keep retrying with backoff; never fall back
 			-- to template data on a live account. Jittered so a fleet that lost the
 			-- DataStore at one instant does not come back at one instant.
+			setPhase(entry, "Retrying")
 			Clock.Wait(Rng.Jitter(math.min(5 * attempt, 60)))
 		end
 		-- Loop exited because Closing or Stopped flipped during a "Wait" backoff: tear the
@@ -2355,6 +2529,7 @@ function Persistence.new(ctx: any)
 			ForceSaveOnce = false,
 			LastSavedSize = nil,
 			LastSavedKeys = nil,
+			LastSavedLedger = nil,
 			SizeWarned = false,
 			TornDown = false,
 			UnsettledMessages = 0,
@@ -2379,6 +2554,12 @@ function Persistence.new(ctx: any)
 		self.EntryCount += 1
 		syncBudgetReserves()
 		self.EntriesByUserId[entry.UserId] = entry
+		entry.StopLoadWatchdog = watchdog(SLOW_LOAD_SECONDS, function()
+			entry.StopLoadWatchdog = nil
+			if not entry.TornDown then
+				warnSlowLoad(entry)
+			end
+		end)
 		Sched.Spawn(function()
 			-- Its OWN thread, so everything the load allocates, the profile copy and the
 			-- whole accessor tree, is charged here. A memory category is per-thread and
@@ -3663,10 +3844,23 @@ function Persistence.new(ctx: any)
 		})
 	end
 
-	function self.BindShutdown()
-		game:BindToClose(function()
+	-- The owner may release this registration after explicitly draining its store.
+	-- Stop alone must not release it: stopped bundles can still own sessions or
+	-- final saves. Roblox retains the bound callback, so clear its only reference
+	-- to the bundle as well as making subsequent invocations inert.
+	function self.BindShutdown(): () -> ()
+		local shutdown: (() -> ())? = function()
 			self.Shutdown(25)
+		end
+		game:BindToClose(function()
+			local run = shutdown
+			if run then
+				run()
+			end
 		end)
+		return function()
+			shutdown = nil
+		end
 	end
 
 	-- Release the process-global signal connections this bundle installed.
@@ -3674,6 +3868,16 @@ function Persistence.new(ctx: any)
 		-- FIRST, before anything is disconnected: the loader reads it on its next turn,
 		-- and a flag set after the yield-heavy teardown would let another round through.
 		self.Stopped = true
+		for _, entry in self.Entries do
+			if entry.StopLoadWatchdog then
+				entry.StopLoadWatchdog()
+				entry.StopLoadWatchdog = nil
+			end
+			if entry.StopLeavingHookWatchdog then
+				entry.StopLeavingHookWatchdog()
+				entry.StopLeavingHookWatchdog = nil
+			end
+		end
 		for _, connection in connections do
 			pcall(function()
 				connection:Disconnect()

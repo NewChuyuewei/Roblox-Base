@@ -7,3 +7,8 @@ sourcemap.json
 
 # 工具
 .rokit/tool-storage/
+
+# 第三方上游下载副本：融合后只保留 src/ReplicatedStorage/<Lib>/（版本与来源见 docs/thirdparty/）。
+# 保留忽略规则，避免下次重新下载时又把 60k 行的副本提交进来。
+/Scribe-main/
+/QuickZone-main/
