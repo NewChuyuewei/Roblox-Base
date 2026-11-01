@@ -72,14 +72,15 @@
 | # | 决策 | 选项 | 结论 | 状态 | 阻塞 |
 | --- | --- | --- | --- | --- | --- |
 | D1 | PlayerState 上游来源 | 用户指定仓库 / 放弃 | 用户指定（待定） | **OPEN** | D4.1 |
-| D2 | PlayerState 是否仍必要 | 保留 / 全改走 TritiumSQL | **保留但降为纯复制组件**：TritiumSQL Phase 3（T3.x）落地后，持久化职责全部移交；且明确 **TritiumSQL 的存储层能力被 DataStore 封顶**（无 fsync / 缓冲池 / 共享内存），不对标 PG 的存储层 | DECIDED | — |
+| D2 | PlayerState 是否仍必要 | 保留 / 全改走 TritiumSQL | **保留但降为纯复制组件**：TritiumSQL Phase 3（T3.x）落地后，持久化职责全部移交；且明确 **TritiumSQL 的存储层能力被 DataStore 封顶**（无 fsync / 缓冲池 / 共享内存），不对标 PG 的存储层 | DECIDED → **已被下表较新的 D2 行取代（CLOSED：取消）** | — |
 | D3 | 引擎 API 形态 | 只 SQL 字符串 / 只类型化构建器 / 两者 | 两者，但 SQL 必须 Init 期编译（I11） | DECIDED | T0.x |
 | D4 | headless 测试运行时 | Lune / 自研伪 shim | Lune；`game` 注入能力由 Step 7 探针决定，失败则 CI 只覆盖纯逻辑模块 | DECIDED | — |
 | D5 | 发布形态 | Wally 包 / submodule | Wally：`vospek/deuterium` + `vospek/tritiumsql`，独立版本号 | DECIDED | D7.6 / T10 |
 | D6 | Scribe 审计 | 审计后保留 / 换自研 | **实测结论：本仓库根本没有 Scribe**（无 `Libraries/`，全仓 grep 命中 0）→ 无可审计，无需五步流程。规格 §3 的「已内置」声明与仓库事实不符，已列入规格修订清单 | **CLOSED** | — |
 | D7 | QuickZone 是否引入 | 引入 / 不引入 | 引入，推迟到世界层动工前 | DECIDED | D6.6 |
 | D8 | 目录落地 | 现树 + Rojo 映射 / 迁到 `src/ReplicatedStorage/` | **已由用户改为 `src/ReplicatedStorage/`**（与规格 §4 一致）。代价：`scope.txt`（CC1）与全部工具路径已随之重写；收益：与规格一致、`Scribe`/`QuickZone` 有自然位置 | **SUPERSEDED** | — |
-| D11 | Scribe 与 QuickZone 是否可用 | 先审计后使用 / 直接用 | **决定：集成**。但**集成≠已审计** —— §2 五步仍未做（无 LICENSE、无版本 hash、未剥离、无 Overrides），列为阻塞任务 `D0.6`。所有权划分与适配器见 `THIRDPARTY.md` | **DECIDED** | `D0.6` |
+| D6 | Scribe 审计 | 审计后保留 / 换自研 | **原结论已作废**：当时「本仓库根本没有 Scribe」（全仓 grep 命中 0）—— 用户 2026-10-26 提供了上游源码（`Scribe-main`）并已融合为 `src/ReplicatedStorage/Scribe/`（46 文件/42,077 行，v2.6.1）。五步审计**已机器化关闭**（`docs/thirdparty/AUDIT.md`），结论：**保留**，经适配器使用。规格 §3 对 Scribe 的角色描述（「日志/观测」）是错的 → 见 THIRDPARTY §2 所有权划分 | **SUPERSEDED** | 已完成 |
+| **D11** | Scribe 与 QuickZone 是否可用 | 先审计后使用 / 直接用 | **审计已完成**（2026-10-26）：① 锁版本 ② 后门面扫描 0 违规 ③ 按可达闭包收敛审计面 ④ Overrides 约定 ⑤ 许可与哈希留档 —— 全部有产物（`docs/thirdparty/` + `scripts/thirdparty-audit.luau`，进出 CI）。headless 实测：Scribe 三入口可装载、QuickZone 不可（桩缺 `:Connect`）。**剩余：适配器骨架（D0.6 ②）** | **AUDIT CLOSED** | `D0.6` |
 | D2 | PlayerState 是否仍必要 | 保留 / 全改走 TritiumSQL | **取消**：Scribe 自带 `Internal/Store/ProfileStore` 且就是玩家数据载体 → PlayerState 的存在理由消失 | **CLOSED（取消）** | — |
 | D2-bis | PlayerState 是否被 Scribe 顶替 | — | **是**：`Dr.Data.Store.PlayerData` / `Dr.State.Sync.Replicator` 由 Scribe 承担（经适配器）；我们只保留 Saga 协调与与 TritiumSQL 的桥 | **CLOSED** | — |
 | D9 | 集成层事件机制 | 直接回调 / `Dr.Signal` 广播 | 待 `Dr.Signal`（D2.0）落地后定；默认先回调（依赖更少、更快），Signal 作为可选广播 | **OPEN** | Step 54/57 |
@@ -166,6 +167,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v16** | **第三方融合（Scribe 2.6.1 / QuickZone 1.5.1）+ 审计五步机器化关闭**：上游源码融合进 `src/ReplicatedStorage/{Scribe,QuickZone}/`（46+13 文件 / 48,611 行，两者 MIT 且各带 LICENSE）；新增审计器兼 I20 门禁 `scripts/thirdparty-audit.luau`（自检 5 组、进 CI）+ 产物 `docs/thirdparty/{AUDIT.md,LOCK.txt,许可文本}`；**后门面 0 违规**、1 处动态 require 登记为接受、审计面按要求闭包收敛（Scribe 46/46、Server 入口 43、Client 入口 22）；实测 **Scribe 三入口可在 Lune 装载、QuickZone 不能**（桩缺 `:Connect`）；D6 原结论作废、D11 审计关闭；`default.project.json`/`rojo build`/全部门禁不受影响 |
 | **v15** | **Phase 0.5 端到端纵切（Step 16.5）交付**：内存版全链（Port→页→索引→TriSQL 编译/执行→读回）**36/36 断言通过**，两个入口（`lune run tests/walkthrough.luau` 与 CI 套件），产物含 `.plan/SEAMS.md`。**它改动了两处规约**：T1 的页容量验收改为**按字节**（原来只有槽位）、新增「端口写失败必须回滚内存态」。另收口 Step 10–12（Step 10 的前提由「Studio 手工」改为 headless；Step 11 的 18 处判据已被 codemod 取代）。新增决策 **D12/D13**（TritiumSQL 的发布依赖 / SQL 错误形状），须在 T3 之前拍板 |
 | **v14** | **变异测试补洞**（`code-review-and-quality` skill 的 Step 2 要求“用实验而非阅读回答测试是否有效”）：对本批 8 处修复逐个做反向变异 → **4 处未被任何测试抓住**（=缺失用例）。已补 3 处：`ProtocolBuffer` 条件冻结、`ShutdownManager` 逆序停、`ModuleLoader` 的 `.selftest` 后缀排除（新增套件，含 Kernel 三个 provider 的启停顺序断言）；**第 4 处（`MockBridge.Reset` 清 listeners）如实标注为“内存卫生修复，公开 API 无法观测”**，未编造测试。补洞后重跑变异：三处均**已被抓住**。另：把“不加引擎桩装载数”从打印改成**断言**（R29 的哨兵以前不会响），并用负例证明它会拦 |
 

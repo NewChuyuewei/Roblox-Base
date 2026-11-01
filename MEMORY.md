@@ -9,16 +9,16 @@
 
 | 依赖 | 规格声称的状态 | **审计实测结论** | 版本/来源 | 审计人 | 结论 |
 | --- | --- | --- | --- | --- | --- |
-| **Scribe** | 「已内置 `Libraries/Scribe`，**日志/观测**，⚠️ 待审计」 | **现已存在于 `src/ReplicatedStorage/Scribe/`（45 文件 / 38,717 行）**。实测事实：① 它**不是日志库**，而是**玩家数据/复制库**（自带 `Internal/Store/ProfileStore.luau`）—— 规格对它的角色描述**错了**；② 35 处 `game:GetService(`、14 处 `DataStoreService`；③ 无 `loadstring`、无数字 id `require` | **无版本标识**（无 tag/hash/file）；**无 LICENSE 文件** | 未审计 | ⛔ **未审计不得使用**（规格 §2） |
+| **Scribe** | 「已内置 `Libraries/Scribe`，**日志/观测**，⚠️ 待审计」 | **以 `Scribe-main` 上游为源，已融合进 `src/ReplicatedStorage/Scribe/`（46 文件 / 42,077 行，版本 2.6.1）**。实测事实：① 它**不是日志库**，而是**玩家数据/复制/经济/排行榜库**（自带 `Internal/Store/ProfileStore.luau` = Apache-2.0 fork）—— 规格对它的角色描述**错了**（已在 THIRDPARTY §2 划清所有权）；② 23 文件有 `game:GetService(`（合计 46 处）；③ **后门面 0 违规**（无 `loadstring`/`getfenv`/`setfenv`/数字 `require`/`_G.`/网络出口；`HttpService` 仅用于 `JSONEncode`/`GenerateGUID`） | **v2.6.1**（`Internal/Version.luau`）+ 内容哈希 `3d797da3` | 机器审计（`scripts/thirdparty-audit.luau`） | ✅ **可经适配器使用**（证据 `docs/thirdparty/AUDIT.md`） |
 | **PlayerState** | 「待引入，⛔ 未审计」 | **仍不存在**（0 引用）。注意：Scribe 已内置 ProfileStore，因此 PlayerState 可能**不再需要** | — | — | 决策 **D2 需重开**（Scribe 可能顶替它） |
-| **QuickZone** | 「计划内置 `ldgerrits/quickzone@^1.4.x`，MIT，⛔ 未审计」 | **现已存在于 `src/ReplicatedStorage/QuickZone/`（13 文件 / 6,534 行）**，头部标 `--v1.5.1 • LDGerrits`（实际版本 **1.5.1**，高于规格写的 ^1.4.x）。无 `loadstring` / 数字 `require` | v1.5.1（无 hash） | 未审计 | ⛔ **无 LICENSE 文件** + 无 hash + 未审计 |
+| **QuickZone** | 「计划内置 `ldgerrits/quickzone@^1.4.x`，MIT，⛔ 未审计」 | **以 `QuickZone-main` 上游为源，已融合进 `src/ReplicatedStorage/QuickZone/`（13 文件 / 6,534 行，版本 1.5.1）**，头部标 `--v1.5.1 • LDGerrits`。无 `loadstring` / 数字 `require` / 网络出口 | **v1.5.1** + 内容哈希 `9babdda8` + `LICENSE.md`（MIT） | 机器审计 | ✅ **可经适配器使用**；⚠ headless 下**不能装载**（见 §1.1 实测） |
 
 ### 1.1 审计义务：**决定集成，但五步未做 → 阻塞任务 `D0.6`**
 
 **决策（2026-10-25，用户）：把 Scribe 与 QuickZone 集成进框架**；两库**不计入 100k 行与 440 模块**（适配器计入）。
 **集成方式、所有权划分、适配器清单、不变量豁免全部写在 `.plan/THIRDPARTY.md`** —— 以那份为准，本表只留**审计状态**。
 
-规格 §2 的五步（锁版本 → 全量审计 → 剥离 → Overrides 改造 → 本文件留档）**每步都未做**。
+规格 §2 的五步（锁版本 → 全量审计 → 剥离 → Overrides 改造 → 本文件留档）**已机器化执行并留档**：审计器是 `scripts/thirdparty-audit.luau`（同时是 I20 门禁，进出 CI），产物是 `docs/thirdparty/AUDIT.md` + `LOCK.txt`，上游许可文本在 `docs/thirdparty/`。**五步状态逐条见 THIRDPARTY.md §7**（1/2/4/5 已关闭，3「剥离」按可达闭包口径收敛而非删上游文件）。
 
 > **顺序很重要**：先**剥离**（把 38.7k 行压到实际用到的部分）再审计 —— 反过来会白审一大半。Scribe 含 `Monetization`/`Leaderboards`/`Analytics`/`Commands` 等我们可能不用的大块。
 
@@ -26,19 +26,28 @@
 
 | 缺口 | 影响 | 最小关闭动作 |
 | --- | --- | --- |
-| 两者**都没有 LICENSE 文件** | 合规基础缺失（QuickZone 声称 MIT，但树里无声明文本） | 补 LICENSE 或在上游确认后另存引用 |
-| Scribe **无版本标识** | 无法锁版本、无法判断上游变更 | 定位上游 tag/commit，记 hash |
-| QuickZone 版本 1.5.1 但**无 commit hash** | 同上 | 同上 |
+| 两者**都没有 LICENSE 文件** | 合规基础缺失（QuickZone 声称 MIT，但树里无声明文本） | ✅ **已关闭**：上游副本带 `LICENSE`/`NOTICE`（Scribe，MIT）与 `LICENSE.md`（QuickZone，MIT），另有被 fork 的 `licenses/ProfileStore-Apache-2.0.txt`；全部留档在 `docs/thirdparty/` |
+| Scribe **无版本标识** | 无法锁版本、无法判断上游变更 | ✅ **已关闭**：`Internal/Version.luau` = `2.6.1`（与 `wally.toml` 一致）+ 内容哈希 + `LOCK.txt` 漂移锁 |
+| QuickZone 版本 1.5.1 但**无 commit hash** | 同上 | ✅ **已关闭**：头部 `--v1.5.1` + 内容哈希 `9babdda8`；上游 tag 未在本地核对（无网络），以**内容哈希**作为锁定依据 |
 | 未做**剥离**（用不到的模块/注释） | 38k+6.5k 行进仓库，供应链面与审查面都变大 | 按实际用到的入口裁剪 |
 | 未做 **Overrides 层** | 无法在不改上游的前提下适配 | 建 `Overrides.luau` 约定 |
 
-**规模对比（必须意识到）**：Scribe **38,717 行 = 框架本体（5,486 行）的 7 倍**；两个依赖合计 **45,251 行**。对本项目而言，这比“允许两个例外”的初衷大得多。
+**规模对比（必须意识到）**：Scribe **42,077 行 ≈ 框架本体（5,486 行）的 7.7 倍**；两个依赖合计 **48,611 行**。对本项目而言，这比“允许两个例外”的初衷大得多。**可达闭包（真正的审计面）**：Scribe 全入口 46/46 文件；**只用 Server 入口则为 43 文件**，只用 Client 为 22 文件 —— 适配器定下入口集后可据此收敛。
 
 **对 DO-178C 认证线的影响**：两者都是**无可鉴定的 COTS/PDS**（直接调 DataStore/引擎），因此**不得被认证核心 require**（I16）—— 门禁 10 的 B 段（依赖闭包）已经能把这类越界抓出来。认证线继续只用自已的 `Port`。
 
 **另外一条未验证的判断**：`Dr.Data`/`Dr.State` 的原计划底层是 PlayerState，而 Scribe 自带 ProfileStore 且是玩家数据/复制库 —— 规格与选型需要重新对齐（决策 D2 重开）。
 
 > 审计方法（可复现）：`grep -rn "Scribe\|PlayerState\|QuickZone" Deuterium TritiumSQL --include=*.luau` 及 `ls Libraries/`。
+
+### 1.1.1 headless（Lune）实测（2026-10-26）
+
+| 目标 | 结果 | 说明 |
+| --- | --- | --- |
+| `Scribe/init.luau` · `Server/init.luau` · `Client/init.luau` | ✅ **可装载**（返回 table） | 用 `scripts/lune-loader.luau` 的 `{engineStub=true, studio=true}`。**前提变了**：原先 THIRDPARTY 判断「大概率不能」，实测**能** —— 适配器的契约测试可以在 Lune 里跑 |
+| `QuickZone/init.luau` | ❌ 失败于 `Core/Scheduler.luau:550: attempt to index nil with 'Connect'` | 引擎桩缺某个 `:Connect` 面（信号类）。要用它做 headless 测试就得先补桩面，否则 QuickZone 只能靠 Studio 手测 |
+
+> ⚠ **装载 ≠ 可用**：桩不实现 DataStore/RemoteEvent 的真实语义，所以「能 require 成功」只说明**没有加载期引擎依赖**，不等于行为被验证。
 > 待办：规格 §3 的依赖表应据此更正（`Deuterium.md` §2 的修订清单已含此项）。
 
 ## 2. 开发期工具链（不计入门禁 6，但需固定）

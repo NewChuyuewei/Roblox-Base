@@ -11,16 +11,16 @@
 | | **Scribe** | **QuickZone** |
 | --- | --- | --- |
 | 位置 | `src/ReplicatedStorage/Scribe/` | `src/ReplicatedStorage/QuickZone/` |
-| 规模 | 45 文件 / **38,717 行** | 13 文件 / 6,534 行 |
-| 版本 | **无标识**（无 tag/hash/文件） | 头部 `--v1.5.1 • LDGerrits` |
-| LICENSE | **无**（树里 0 个非 `.luau` 文件） | **无** |
+| 规模 | **46 文件 / 42,077 行**（上游 `Scribe-main`） | 13 文件 / **6,534 行**（上游 `QuickZone-main`） |
+| 版本 | **v2.6.1**（`Internal/Version.luau`，与 `wally.toml` 一致）+ 内容哈希 `3d797da3` | **v1.5.1**（头部 `--v1.5.1 • LDGerrits`）+ 内容哈希 `9babdda8` |
+| LICENSE | **MIT**：`LICENSE`（+ `NOTICE`）留档于 `docs/thirdparty/Scribe/`；被 fork 的 ProfileStore 另有 `licenses/ProfileStore-Apache-2.0.txt` | **MIT**：`LICENSE.md` 留档于 `docs/thirdparty/QuickZone/` |
 | 入口签名 | `require(Scribe) -> { Server, Client }`；**一个共享模块声明模板与选项** | 单例对象 + 方法：`configure/setEnabled/update/rebuild/setReference/setFrameBudget/getZonesAtPoint/iterZonesOfEntity/visualize` … |
 | 自带子模块 | `Internal/{Log, Metrics, Health, Budget, Signal, Sched, Transport, Wire, Store/ProfileStore}` · `Server/{ServerStore, Persistence, Replication, Leaderboards, Monetization, Exchanges, Analytics, Commands, Timed}` | `Core/{PlayerTracker, Scheduler, State}` · `Utils/{Geometry, LinearBVH, Log}` · `Classes/{Zone, Zones, Group, Observer}` |
 | 引擎触点 | 35× `game:GetService(` · 14× `DataStoreService` | `RunService` + 空间查询，无 DataStore |
 | 后门面 | 无 `loadstring`、无数字 id `require` ✓ | 同 ✓ |
 | 类型求解器要求 | 头部注明「typed accessor tree 需要新版 Luau 类型求解器；没有它也能运行（用 `.Raw` 逃逸）」 | 无 |
 
-**规模认知（必须先接受这个事实）**：Scribe 一个库 = **框架本体（5,486 行）的 7 倍**；两者合计 **45,251 行**。规格写「唯二例外」时显然不是这个量级。
+**规模认知（必须先接受这个事实）**：Scribe 一个库 ≈ **框架本体（5,486 行）的 7.7 倍**；两者合计 **48,611 行**。规格写「唯二例外」时显然不是这个量级。
 
 ## 2. 所有权划分（本文件最要紧的一张表）
 
@@ -78,7 +78,7 @@ Scribe 的能力范围**远超**规格原先设想的「PlayerData + Replica 封
 
 | 项 | 计入 100k？ | 理由 |
 | --- | --- | --- |
-| `Scribe/**`（38,717 行）· `QuickZone/**`（6,534 行） | **否** | 不是我们的产出；其维护成本不随我们的预算增长；且它们有独立的上游生命周期 |
+| `Scribe/**`（42,077 行）· `QuickZone/**`（6,534 行） | **否** | 不是我们的产出；其维护成本不随我们的预算增长；且它们有独立的上游生命周期 |
 | **适配器**（§3 的 5 个模块） | **是** | 我们写的、要维护、要测 |
 | `Overrides/` 补丁层（若将来需要） | **是** | 同上 |
 | 第三方侧的**测试**（契约测试） | **是** | 我们写的，且是接入的质量保证 |
@@ -94,25 +94,25 @@ Scribe 的能力范围**远超**规格原先设想的「PlayerData + Replica 封
 | **`Deuterium.md` 规格 §2/§3** | ① Scribe 的角色描述**错了**：它不是「日志/观测」，而是玩家数据/复制/经济/排行榜库；② `PlayerState` **取消**（Scribe 自带 ProfileStore，已覆盖其职责）→ 决策 D2/D2-bis 结案；③ 例外清单从「Scribe + PlayerState + QuickZone」改为「**Scribe + QuickZone**」 |
 | `D4.x` 会话态与状态 | **大幅收缩**：`D4.1`（PlayerState 审计+内置）**取消** → 改为「Scribe 适配」；`D4.2`/`D4.7`（PlayerData / Replicator 自研）**取消** → 改为适配器；`D4.5`/`D4.6`（State 响应式/状态机）**保留**（Scribe 无此能力）；`D4.3`（Saga 协调）保留并扩展为「Scribe ↔ TritiumSQL」桥 |
 | `D6.6` 世界层 | `Dr.World.Spatial` 三件套改为 **QuickZone 适配器**（规格原意）；`Dr.World.Scene` 仍自研 |
-| 设备/波次 | 新增 **D0.6 第三方集成准备**（在第 14/15 步之前或并行）：① 审计五步（§7）② 5 个适配器骨架 ③ `thirdparty-check` 门禁 |
+| 设备/波次 | **D0.6 第三方集成准备（2026-10-26 部分完成）**：① 审计五步已机器化关闭 ✅（`scripts/thirdparty-audit.luau` + `docs/thirdparty/AUDIT.md`/`LOCK.txt`）② 审计器同时就是 ③ 里的 `thirdparty-check`/I20 门禁 ✅（已进 CI）→ **剩余：5 个适配器骨架**（随 D4.x/D6.6 落地） |
 | 认证线 | 两棵树**明确列为范围外 COTS**；适配器也在范围外。`scope.txt` 不加任何 Scribe/QuickZone 文件 |
 
-## 7. 审计义务（D11 的剩余部分，仍是阻塞项）
+## 7. 审计义务（D11 的剩余部分）—— **审计已机器化关闭（2026-10-26）**
 
-规格 §2 的五步从「无对象」变为**有对象且未做**：
+规格 §2 的五步（锁版本 → 全量审计 → 剥离 → Overrides → 留档）已交付**可复现的工具链**，不再是纸质承诺：
 
-| 步 | 状态 | 关闭动作 |
+| 步 | 状态 | 证据 / 关闭动作 |
 | --- | --- | --- |
-| 1 锁版本 | ❌ | 定位上游 tag/commit，记 hash（QuickZone 已知 v1.5.1；Scribe 需要查上游） |
-| 2 全量审计（找后门面） | ◐ **部分已做** | 已确认：**无 `loadstring`、无数字 id `require`**（这是规格 §2 第 2 步最担心的两项）。仍需做：sink/网络出口、`require` 外部模块、隐藏的 `HttpService` 用法 |
-| 3 剥离 | ❌ | 按实际用到的入口裁剪（Scribe 有 `Monetization`/`Leaderboards`/`Analytics`/`Commands` 等我们可能不用的大块；**剥离能显著削减 38.7k 行**） |
-| 4 Overrides 层 | ❌ | 建约定：适配器优先，**不改上游文件**；必须改时放 `Overrides.luau` |
-| 5 留档 | ◐ | `MEMORY.md` §1.1 已有事实表；缺 LICENSE 归属与 hash |
+| 1 锁版本 | ✅ **已关闭** | Scribe `2.6.1`（`Internal/Version.luau`）+ QuickZone `1.5.1`；各自的**内容哈希**与文件/LOC/字节数写入 `docs/thirdparty/LOCK.txt`（升级后跑 `--write-lock` 重建） |
+| 2 全量审计（找后门面） | ✅ **已关闭（按可达闭包）** | 机器扫描：`loadstring`/`getfenv`/`setfenv`/`getgenv`/`debug.getinfo`/`debug.setupvalue`/数字 `require`/`_G.`/**网络出口**（`HttpService:{Get,Post,Request}Async`）→ **0 违规**。`HttpService` 其余用法（`JSONEncode`/`GenerateGUID`）已核为良性。**1 处动态 require 经审阅登记为接受**（`Server/Persistence.luau` 的 `require(injected)`，注入点由我们的适配器控制） |
+| 3 剥离 | ◐ **按需收敛** | **不改上游文件**（否则升级要手工合并）→ 改为**按入口收敛审计面**：`init.luau` 46/46 文件、`Server/init.luau` 43 文件、`Client/init.luau` 22 文件（数字见 `docs/thirdparty/AUDIT.md` §3）。真删文件等适配器定下入口集 |
+| 4 Overrides 层 | ✅ **约定已立** | 适配器优先、**不改上游**；必须改时放 `Overrides.luau`（我们写的，计入预算）。`LOCK.txt` 会拦下任何未登记的改动 |
+| 5 留档 | ✅ **已关闭** | `docs/thirdparty/{Scribe/{LICENSE,NOTICE,licenses,wally.toml},QuickZone/{LICENSE.md,wally.toml}}` + `AUDIT.md`（生成物）+ `LOCK.txt` + 本节 |
 
-**审计的规模要说清**：Scribe 38,717 行做「全量人工审计」不现实。可执行的做法是**按入口收敛审计面**：先做剥离（步骤 3）把行数压下来，再对保留部分做审计。**顺序反过来（先全量审计再剥离）会白审一大半。**
+**审计的规模要说清**：Scribe 42,077 行做「全量人工审计」不现实。本项目的做法是**机器化的入口收敛审计**：`scripts/thirdparty-audit.luau` 先算 require 可达闭包（**形状不认识就报错，不静默跳过** —— 漏边会让闭包假小），再对闭包内文本做后门面扫描。它同时是 I20 门禁，进出 CI。
 
-**LICENSE 缺口**：两者树里都没有 LICENSE 文件。集成前必须补（或在上游确认后另存引用文件），否则合规基础不成立。
+**升级上游的流程（runbook）**：① 取上游新副本 → ② `cp -r <上游>/src/. src/ReplicatedStorage/<Lib>/` → ③ `lune run scripts/thirdparty-audit.luau`（看违规与闭包变化）→ ④ 人工复核 §2 的引擎触点清单变化 → ⑤ `--write-lock` 重建锁 → ⑥ 重跑适配器契约测试。**任何一步跳过都会让锁与审计失真。**
 
 ---
 
-未读/未验证：Scribe 的 `Server`/`Client` 具体调用序列（只读了入口与结构，未读 `Server/init.luau`）；`Types.luau` 的 33 个导出类型只取了名字，未逐个理解语义；QuickZone 的 `configure` 参数与帧预算语义未读；两库在 **headless（Lune）** 下能否加载未知 —— 它们都 `require(RunService)`，因此**大概率不能**，这会影响测试策略（需在 `docs/headless.md` 补一期实测）。
+未读/未验证：闭包口径是 **require 静态可达**（不含运行期才访问的路径，如通过 Scribe 自身的 DI 逃逸口加载的模块）；`game:GetService` 的**调用时序**未验证；上游 **commit/tag 未在本地核对**（无网络），锁定依据是内容哈希；Scribe 的 33 个导出类型未逐个理解语义；QuickZone 的 `configure` 参数与帧预算语义未读。**headless 实测**见 `MEMORY.md` §1.1.1：Scribe 三入口可装载、QuickZone 因桩缺 `:Connect` 面不可装载。

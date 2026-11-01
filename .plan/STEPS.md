@@ -61,6 +61,8 @@
 | 2026-10-25 | **Step 11** | ✅ | 判据过时：18 处已由 codemod 变为相对 require（17 + 1 带 WaitForChild），均不碰 game |
 | 2026-10-25 | **Step 16.5** | ✅ | 纵切 36/36 断言；Spike 4 文件 + `tests/walkthrough.luau` + `.plan/SEAMS.md`；暴露 6 接口 / 4 证伪 / D12·D13 |
 | 2026-10-25 | **Step 12** | ✅ | 四件套全绿 + tag `v0.1.0-alpha`（D0.1 收口） |
+| 2026-10-26 | **第三方融合（Scribe/QuickZone）** | ✅ | 上游源码融合进 `src/ReplicatedStorage/{Scribe,QuickZone}/`（46+13 文件 / 48,611 行；Scribe **2.6.1**、QuickZone **1.5.1**，两者 MIT，各带 LICENSE）；新增审计器兼 I20 门禁 `scripts/thirdparty-audit.luau`（自检 5 组）+ 产物 `docs/thirdparty/{AUDIT.md,LOCK.txt,LICENSE…}`；**五步审计机器化关闭**（后门面 0 违规、1 处动态 require 登记为接受）；CI 接入；`default.project.json`/\\`rojo build\\` 不受影响；测试仍 PASS 10 · FAIL 0 · SKIP 0 |
+| 2026-10-26 | **D0.6（①审计 ③门禁）** | ✅ | 见上一行；**剩余 ② 5 个适配器骨架**（随 D4.x/D6.6 落地） |
 | 2026-10-25 | **Step 8** | ✅ | `.gitlab-ci.yml` 四阶段（本地逐条 exit 0）；`luau-lsp analyze` **首次真跑：TypeError 0**（经 MCP 找到 Cloudflare CDN 取到类型定义并 vendor）；抓到 **1 个真运行时 bug**（Debug 双映射 → 相对 require 指向错处） |
 | 2026-10-25 | **Step 10 前置** | ✅ | 建好 `Configs/Deuterium/{init,FeatureFlags}.luau` + 映射（folder-module 布局，否则 `IsA("ModuleScript")` 或子节点二者必失其一） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
