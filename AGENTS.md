@@ -95,6 +95,16 @@ LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTy
   加载期引擎依赖、`table.freeze` 对已冻结表抛错、Luau 插值写成 `${expr}`
 
 **新增/改代码时请自问**：这个模块还能在不加引擎桩的情况下被装载吗？做不到就说明它把引擎依赖放到了加载期。
+### 5.6 认证线怎么加东西（C3 之后的规矩，门禁 11 会拦）
+
+改动认证范围（`docs/cert/scope.txt` 列出的文件）时，**先有需求，再写码**（I18）。三步缺一不可：
+
+1. **加需求**：`docs/cert/req/<MOD>.md`（每模块一份，含 HLR 段与 LLR 段）。HLR 八个字段、LLR 五个字段**全为必填**；HLR 的「危害追溯」必须是 `HAZARD.md` 里的 `H1`–`H7` 或 Dr 纯底座的 `基础`；LLR 的「上级需求」必须指向存在的 HLR。
+2. **在源码上标注解**：每个导出函数 / `export type` 上方贴 `-- LLR-<MOD>-nnn`（`<MOD>` = 文件末段大写，例 `Contract.luau` → `CONTRACT`）。**漏标不是风格问题，是"无需求代码"**，门禁 11 直接失败。
+3. **加用例**：`tests/cert/cases/<MOD>.luau`。文件头写 `-- covers: TC-…, LLR-…, HLR-…`，每条用例写 `id`/`kind`（正常·边界·错误）/`covers = {...}`。用例**不得** require `Dr.Testing`/`SelfTest`（两条线的证据不能混）。
+
+跑：`lune run scripts/cert-trace-check.luau`（门禁 11）· `lune run tests/cert/run.luau`（认证线用例，生成 `docs/cert/verify/`）。
+`docs/cert/TRACE.md` 与 `docs/cert/verify/*.md` 都是**生成物**，手改会被下次运行覆盖 —— 改需求要改 `req/`，改结果要改用例。
 
 ## 6. 写文件时
 

@@ -62,6 +62,19 @@
 | `rojo` | 实例树构建 | 不用于认证信用 |
 | ~~`selene`~~ | **已移除** | ✂ 见下 |
 
+### `stylua 2.6.0` 的非幂等形状（2026-10-26，踩了四次）
+
+**现象**：某些嵌套表构造会让 stylua 的 `--check` 在**自己刚格式化过的文件**上继续报 diff ——
+即 `stylua <file>` 之后再 `stylua --check <file>` **不为 0**。CI 会因此红，而代码看起来是"已格式化"的。
+
+| 触发形状 | 绕开写法 |
+| --- | --- |
+| `return table.freeze({ ... }) :: any, nil` | 先 `local rs: any = table.freeze({ ... })`，再 `return rs, nil` |
+| `table.insert(x, { ... })`（表构造作为第二个实参，字段多到需要换行） | 先 `local finding: T = { ... }`，再 `table.insert(x, finding)` |
+
+> 这条不是审美问题：**它是 CI 假红/真红的来源**。碰到时不要反复跑 `stylua`，而是换形状。
+> 判据：改完必须 `stylua --check` **exit 0**（而不是只看"刚跑过 stylua"）。
+
 ### `selene` 移除记录（2026-10-25）
 
 **理由**：`selene 0.32.0`（**其最新 release**）在 full_moon 3.0.0 的 tokenizer 上对 **Luau 反引号插值字符串** panic（`internal error: entered unreachable code`）。最小复现仅 3 行：`local n = 7` + `` local s = `value={n}` ``。本仓库到处在用该语法（既有 `ErrorHandler`/`Kernel`/`FeatureFlags`，Step 3 新增 5 个文件中 3 个触发）。
