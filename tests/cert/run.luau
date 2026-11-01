@@ -15,6 +15,8 @@
 --   t.ok(cond, label) / t.eq(actual, expected, label) / t.throws(fn, label) / t.raises(fn, codePrefix, label)
 
 local Loader = require("../../scripts/lune-loader")
+-- harness 与覆盖工具（scripts/coverage.luau）共用一份：两条路必须跑同一套断言语义
+local Harness = require("../../scripts/cert-harness")
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 
@@ -33,64 +35,6 @@ local function luneVersion(): string
 	return if ok and type(value) == "string" then value else "?"
 end
 
--- 用例文件是纯函数模块（不 require 任何东西），所以直接 loadstring 即可 ——
--- 不必让 loader 再挂一个根（一个进程只能挂一个根，而认证模块在
--- src/ReplicatedStorage、用例在 tests/cert/cases）。
-local function loadCases(name: string): { any }
-	local path = `tests/cert/cases/{name}.luau`
-	local chunk = assert(loadstring(fs.readFile(path) :: string, path))
-	return chunk()
-end
-
-local function newHarness()
-	local t: any = { checks = 0, failures = {} }
-	local function fail(label: string, detail: string)
-		table.insert(t.failures, `{label} — {detail}`)
-	end
-	function t.ok(cond: any, label: string)
-		assert(type(label) == "string" and #label > 0, "t.ok 必须带 label（两参）")
-		t.checks += 1
-		if not cond then
-			fail(label, `期望为真，得到 {tostring(cond)}`)
-		end
-	end
-	function t.eq(actual: any, expected: any, label: string)
-		-- 护栏：写完真出过一次 “t.eq(cond, "文字")” 的少参误用，报错会指向错的地方。
-		assert(type(label) == "string" and #label > 0, "t.eq 必须带 label（三参）")
-		t.checks += 1
-		if actual ~= expected then
-			fail(label, `期望 {tostring(expected)}，得到 {tostring(actual)}`)
-		end
-	end
-	-- 只要求“抛了”（用于 assert 类前置条件）
-	function t.throws(fn: () -> (), label: string): any
-		t.checks += 1
-		local ok, err = pcall(fn)
-		if ok then
-			fail(label, "期望抛出，但没有抛")
-		end
-		return err
-	end
-	-- 要求“抛出的是 DrError”，并校验 code 前缀；返回实际 code
-	function t.raises(fn: () -> (), codePrefix: string?, label: string): string
-		t.checks += 1
-		local ok, err = pcall(fn)
-		if ok then
-			fail(label, "期望抛出 DrError，但没有抛")
-			return ""
-		end
-		if type(err) ~= "table" or type(err.code) ~= "string" or type(err.message) ~= "string" then
-			fail(label, `抛出的不是 DrError（而是 {type(err)}: {tostring(err)}）`)
-			return ""
-		end
-		if codePrefix ~= nil and codePrefix ~= "" and string.sub(err.code, 1, #codePrefix) ~= codePrefix then
-			fail(label, `期望 code 前缀 {codePrefix}，得到 {err.code}`)
-		end
-		return err.code
-	end
-	return t
-end
-
 -- ---------- 装载认证模块（无引擎桩）----------
 local M: any = { meta = { engineStub = false, loader = "scripts/lune-loader.luau" } }
 for _, entry in CERT_MODULES do
@@ -103,25 +47,19 @@ local totalCases, totalFail = 0, 0
 local totalChecks = 0
 for _, entry in CERT_MODULES do
 	-- 用例文件名用 key（PascalCase，与源码同名），不是全大写的 MOD 短名
-	local cases = loadCases(entry.key)
-	local t = newHarness()
+	local cases = Harness.loadCases(entry.key)
+	local results, t = Harness.runCases(cases, M)
 	local recorded: { any } = {}
-	for _, case in cases do
-		local before = #t.failures
-		local okRun, err = pcall(case.run, t, M)
-		if not okRun then
-			table.insert(t.failures, `{case.id} — 用例自身抛错: {tostring(err)}`)
-		end
-		local passed = #t.failures == before
+	for _, case in results do
 		totalCases += 1
-		if not passed then
+		if not case.pass then
 			totalFail += 1
 		end
 		table.insert(recorded, {
 			id = case.id,
 			kind = case.kind,
 			covers = table.concat(case.covers, ", "),
-			pass = passed,
+			pass = case.pass,
 		})
 	end
 	totalChecks += t.checks

@@ -47,6 +47,10 @@ lint:
     - lune run scripts/thirdparty-audit.luau
     # 门禁 11（I18/REQ-STD §5）：需求 · 代码 · 用例 四向追溯；同时生成 docs/cert/TRACE.md
     - lune run scripts/cert-trace-check.luau
+    # 门禁 12（CERT.md §7.2）：认证范围 statement 覆盖 + 插桩器自检（C4）
+    # 自研插桩器：sethook 在 Lune 不存在 → 源码插桩 + 括号深度 + 编译裁判（见 scripts/instrument.luau）
+    - lune run scripts/coverage.luau
+    - lune run scripts/coverage.luau --selftest
     # 门禁必须先证明自己会失败
     - lune run scripts/cert-scope-check.luau --selftest
     - lune run scripts/thirdparty-audit.luau --selftest
@@ -88,6 +92,7 @@ cert:
     paths:
       - docs/cert/TRACE.md
       - docs/cert/verify/
+      - docs/cert/coverage/
     expire_in: 4 weeks
 
 # 保留 GitLab 自带的 SAST（免费的额外信号，与上面的门禁不冲突）
