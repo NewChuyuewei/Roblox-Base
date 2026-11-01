@@ -38,7 +38,7 @@
 | 13–15 | ☐ | 30–35 | ☐ | 60–65 | ☐ |
 | 16 ☐ / **16.5 ✅** | ◐ | 36–43 | ☐ | — | — |
 | 17–19 | ☐ | **70（C1）✅ · 71（C2）✅** | ✅ | — | — |
-| — | — | **72（C3）✅ · 73–75（C4–C6）☐** | ◐ | — | — |
+| — | — | **72（C3）✅ · 73（C4）✅ · 74–75（C5–C6）☐** | ◐ | — | — |
 
 ### 完成日志
 
@@ -64,6 +64,7 @@
 | 2026-10-26 | **第三方融合（Scribe/QuickZone）** | ✅ | 上游源码融合进 `src/ReplicatedStorage/{Scribe,QuickZone}/`（46+13 文件 / 48,611 行；Scribe **2.6.1**、QuickZone **1.5.1**，两者 MIT，各带 LICENSE）；新增审计器兼 I20 门禁 `scripts/thirdparty-audit.luau`（自检 5 组）+ 产物 `docs/thirdparty/{AUDIT.md,LOCK.txt,LICENSE…}`；**五步审计机器化关闭**（后门面 0 违规、1 处动态 require 登记为接受）；CI 接入；`default.project.json`/\\`rojo build\\` 不受影响；测试仍 PASS 10 · FAIL 0 · SKIP 0 |
 | 2026-10-26 | **D0.6（①审计 ③门禁）** | ✅ | 见上一行；**剩余 ② 5 个适配器骨架**（随 D4.x/D6.6 落地） |
 | 2026-10-26 | **Step 72（C3）** | ✅ | 需求基线 10 HLR + 12 LLR（4 个既有认证模块反向补需求）· 源码 12 处 `-- LLR-…` 注解 · 认证线用例 17 个 / 89 断言（独立 runner `tests/cert/run.luau`）· 门禁 11 `scripts/cert-trace-check.luau`（自检 1 正控 + 7 负例）· `docs/cert/{TRACE.md,verify/*}` 生成物 · CI 新增 `cert` job ；`AC-C3` 两条负例在真实仓库上证明 |
+| 2026-10-26 | **Step 73（C4）** | ✅ | statement 覆盖工具（自研插桩器：源码插桩 + 括号深度 + 编译裁判）· 探针 P1–P8 · 门禁 12 · 范围 4 模块 **58/58 = 100.0%** · 插桩器自检 8 组（含它自己抓到的构造器注入 bug 回归）· R18 关闭 / R21 缓解 · 新工具事实 3 条入 MEMORY |
 | 2026-10-25 | **Step 8** | ✅ | `.gitlab-ci.yml` 四阶段（本地逐条 exit 0）；`luau-lsp analyze` **首次真跑：TypeError 0**（经 MCP 找到 Cloudflare CDN 取到类型定义并 vendor）；抓到 **1 个真运行时 bug**（Debug 双映射 → 相对 require 指向错处） |
 | 2026-10-25 | **Step 10 前置** | ✅ | 建好 `Configs/Deuterium/{init,FeatureFlags}.luau` + 映射（folder-module 布局，否则 `IsA("ModuleScript")` 或子节点二者必失其一） |
 | — | S2 | ☐ | 待人在 GitLab 侧设 `main` 保护 + Pipelines must succeed |
@@ -376,7 +377,7 @@ Step 13+      D0.2 / D0.3 起（认证范围内的模块，此后每件先有 LL
 | ~~71~~ | **C2** ✅ | 已完成：`docs/cert/` 7 份文档 + 索引；`PSAC.md` §4 的分表目标关闭表（含自洽校验）；`REQ-STD.md`/`TYPES.md` 两份工作标准 | 五份计划互不矛盾 ✅；目标**按表**标注（行级编号需标准原文，已声明未达成） |
 | — | — | 插入 Steps 7–12（D0.1 收口）与门禁 10–12 宿主 | — |
 | 72 | **C3** ✅ | **已交付（2026-10-26）** —— ① `docs/cert/req/<MOD>.md` ×4（10 HLR / 12 LLR，反向补需求）② 源码 12 处 `-- LLR-…` 注解 ③ `tests/cert/cases/<MOD>.luau` ×4（17 用例 / 89 断言）④ `tests/cert/run.luau` → `docs/cert/verify/<MOD>.md` ⑤ `scripts/cert-trace-check.luau`（门禁 11）→ `docs/cert/TRACE.md`；CI 加独立 `cert` job | `AC-C3` **在真实仓库上证明**：去掉测试 → `UNTESTED_REQ`；加无注解代码 → `UNSOURCED_CODE`；还原 → 0 违规。**方向④（需求→覆盖）留 C4** |
-| 73 | **C4** | statement 覆盖工具 + 报告入库 | **第一步先做 `debug.sethook` 在 Lune 0.11.1 的可用性探针**；不可用则 DAL C 的目标 7.2 无法关闭（风险 R18） |
+| 73 | **C4** ✅ | **已交付（2026-10-26）** —— 探针 `scripts/probe-coverage.luau`（P1–P8，实测：sethook 无 / @lune/luau 无 parser 与覆盖 / loadstring 会抛 / _G 空 / 构造器陷阱）；插桩器 `scripts/instrument.luau`（纯函数 + 可注入编译谓词）；工具 `scripts/coverage.luau`（跑认证线用例 → `docs/cert/coverage/<MOD>.json`）；登记表 `docs/cert/coverage/UNCOVERED.md` | `AC-C4`：范围 4 模块 **58/58 = 100.0%**；插桩器自检 8 组；未覆盖行 0（有则必须登记理由） |
 | 74 | **C5** | 工具鉴定登记逐条关闭；`stylua` 在认证范围只跑 `--check`（只读）；加 AST 等价性检查 | 每件工具有 TQL 判定与理由；无一件“默认免鉴定” |
 | 75 | **C6** | 基线 / 问题报告 / 状态记帐自动产出 | `BASELINE.md`/`PROBLEMS.md`/`STATUS.md` 由 CI 生成；改一个认证范围文件能触发变更控制 |
 

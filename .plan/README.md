@@ -61,7 +61,7 @@
 | 9 | **集成方向**：`Dr.*` 中 `Deuterium/Integration/` 之外出现 `Tri.*` → 阻断（I14） | CI grep |
 | 10 | **认证范围**（I16）：认证范围模块触碰引擎/网络/非认证层，**或依赖范围外模块** → 阻断 | ✅ 已交付 `scripts/cert-scope-check.luau`（Lune，A 字面 + B 依赖闭包，自带 `--selftest`） |
 | 11 | **追溯完整性**：每条 HLR/LLR 有测试；认证范围内无“无需求的可执行语句” | **门禁 11 已交付**：`scripts/cert-trace-check.luau`（CI）→ `docs/cert/TRACE.md`；四向机器化，方向④归 C4 |
-| 12 | **结构覆盖**：认证范围达 100% statement，未覆盖行必须有解释或问题报告 | 覆盖工具（随 C4 交付） |
+| 12 | **结构覆盖**：认证范围达 100% statement，未覆盖行必须解释 | **门禁 12 已交付**：`scripts/coverage.luau`（自研插桩器 + 括号深度 + 编译裁判）→ `docs/cert/coverage/<MOD>.json`；未覆盖行须登记在 `docs/cert/coverage/UNCOVERED.md` |
 
 > 门禁 10–12 是 `CERT.md` 的强制装置，但它们本身也分阶段交付 —— 在 C1–C4 完成前，门禁 10–12 **不存在**，认证线因此不得开工。这与“C1–C3 前冻结功能 Wave”是同一条规则的两面。
 
@@ -167,6 +167,7 @@ Step 13–16  Phase 0.2–0.4  Foundation 前置件 + Simulator + 引擎端口
 | v1 | 从 `Deuterium.md` §8 与仓库审计重写；`Text File.txt` 路线图重排为 `TritiumSQL.md` |
 | v2 | 引入规模标定（`SCALE.md`）、执行手册（`STEPS.md`）、纵切优先策略、Phase 0 |
 | v3 | 引入集成契约（`INTEGRATION.md`）与 100k 行预算 + 记分板 |
+| **v18** | **C4（Step 73）交付：statement 覆盖工具 + 门禁 12** —— 按 Step 73 的判据**先做成功性探针**（`scripts/probe-coverage.luau`，P1–P8）：`debug.sethook` 在 Lune 0.11.1 **不存在**、`@lune/luau` 只有 `compile`/`load`（无 parser、无 `getcoverage`）→ 原生覆盖路线不可用，机制定为**源码插桩**。工具分两个模块：`scripts/instrument.luau`（纯插桩器，可单测）+ `scripts/coverage.luau`（跑认证线用例 → 报告 + 门禁判定）。**认证范围 4 模块 58/58 可执行行 = 100.0%**，未覆盖 0 行；插桩器自检 **8 组**（含它自己抓到的真 bug 的回归）。探针还查出三条平台约束（`loadstring` 语法错会**抛**、`_G` 在 Lune 是**空表**、表构造器前缀会被当**数组元素**）；R18 关闭、R21 缓解（交叉校验 + 自检 + 行为级断言） |
 | **v17** | **C3（Step 72）交付：需求基线 + 追溯生成器 + 门禁 11** —— 认证线现在有了**需求→代码→用例**的四向闭环：① `docs/cert/req/<MOD>.md` ×4（**10 HLR / 12 LLR**，对 4 个**既有**认证模块反向补需求）② 源码 12 处 `-- LLR-<MOD>-nnn` 注解 ③ `tests/cert/cases/<MOD>.luau` ×4（**17 用例 / 89 断言**，正常·边界·错误三类齐备）④ 认证线独立 runner `tests/cert/run.luau` → 生成 `docs/cert/verify/<MOD>.md` ⑤ 门禁 11 `scripts/cert-trace-check.luau`（生成 `TRACE.md`，自检 1 正控 + 7 负例）。**AC-C3 在真实仓库上证明**：去掉测试 → `UNTESTED_REQ`；加无注解代码 → `UNSOURCED_CODE`（`Interface.luau:40`），还原后重新变绿。CI 新增独立 `cert` job（两条线报告不合并）。**方向④（需求→覆盖）仍未自动化**，归 C4 |
 | **v16** | **第三方融合（Scribe 2.6.1 / QuickZone 1.5.1）+ 审计五步机器化关闭**：上游源码融合进 `src/ReplicatedStorage/{Scribe,QuickZone}/`（46+13 文件 / 48,611 行，两者 MIT 且各带 LICENSE）；新增审计器兼 I20 门禁 `scripts/thirdparty-audit.luau`（自检 5 组、进 CI）+ 产物 `docs/thirdparty/{AUDIT.md,LOCK.txt,许可文本}`；**后门面 0 违规**、1 处动态 require 登记为接受、审计面按要求闭包收敛（Scribe 46/46、Server 入口 43、Client 入口 22）；实测 **Scribe 三入口可在 Lune 装载、QuickZone 不能**（桩缺 `:Connect`）；D6 原结论作废、D11 审计关闭；`default.project.json`/`rojo build`/全部门禁不受影响 |
 | **v15** | **Phase 0.5 端到端纵切（Step 16.5）交付**：内存版全链（Port→页→索引→TriSQL 编译/执行→读回）**36/36 断言通过**，两个入口（`lune run tests/walkthrough.luau` 与 CI 套件），产物含 `.plan/SEAMS.md`。**它改动了两处规约**：T1 的页容量验收改为**按字节**（原来只有槽位）、新增「端口写失败必须回滚内存态」。另收口 Step 10–12（Step 10 的前提由「Studio 手工」改为 headless；Step 11 的 18 处判据已被 codemod 取代）。新增决策 **D12/D13**（TritiumSQL 的发布依赖 / SQL 错误形状），须在 T3 之前拍板 |

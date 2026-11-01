@@ -57,6 +57,13 @@ LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTy
 "$ROJO" build -o /tmp/place.rbxlx                           # 结构冒烟
 ```
 
+# 门禁 11/12（认证线）：追溯完整性 + statement 覆盖
+"$LUNE" run scripts/cert-trace-check.luau                  # 门禁 11 → docs/cert/TRACE.md
+"$LUNE" run scripts/cert-trace-check.luau --selftest
+"$LUNE" run scripts/coverage.luau                          # 门禁 12 → docs/cert/coverage/*.json
+"$LUNE" run scripts/coverage.luau --selftest                # 插桩器自己的测试（8 组）
+"$LUNE" run tests/cert/run.luau                             # 认证线用例 → docs/cert/verify/*.md
+"$LUNE" run scripts/probe-coverage.luau                     # 覆盖机制的成功性探针（P1–P8）
 **坑位（都踩过）**：
 
 | 坑 | 事实 |

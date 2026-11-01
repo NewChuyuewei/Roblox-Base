@@ -62,6 +62,14 @@
 | `rojo` | 实例树构建 | 不用于认证信用 |
 | ~~`selene`~~ | **已移除** | ✂ 见下 |
 
+### Lune 0.11.1 的三条平台约束（2026-10-26，C4 探针实测）
+
+| 事实 | 影响 |
+| --- | --- |
+| `loadstring` 遇到**语法错会抛**（Roblox 的返回 `nil, err`） | 任何"试编译"都要 `pcall` 包住，否则一个坏片段炸穿整管 |
+| `_G` 是**空表**（0 个键），但 `debug`/`print` 等仍是可用全局 | 别用 `_G` 去探测/注入标准库；`_G.debug` 是 `nil` 而全局 `debug` 是 table |
+| `@lune/luau` 只有 `compile` / `load`（**无 parser、无 `getcoverage`**） | 拿不到 AST、也开不了原生 statement 覆盖 → 覆盖只能靠**源码插桩**（`scripts/instrument.luau`） |
+| `debug.sethook` **不存在**；`debug.info(fn,"sln")` 返回 `(source, line, name)`，`"l"` 只给**定义行**（无 lastline） | 行钩子路线作废；交叉校验只能用"函数定义行"这一粒度 |
 ### `stylua 2.6.0` 的非幂等形状（2026-10-26，踩了四次）
 
 **现象**：某些嵌套表构造会让 stylua 的 `--check` 在**自己刚格式化过的文件**上继续报 diff ——
