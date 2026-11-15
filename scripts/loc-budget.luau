@@ -15,6 +15,13 @@
 --   工具         scripts/**
 --   （不计入）   清单里登记的项目条目（Configs、Debug.luau）—— 单独列出，避免被误读成进度
 --
+-- 第二张表按组件的标准形状（.plan/CARBON.md §3.3）再分一次，只报告、不设门槛：
+--   PURE         不碰引擎的核心：组件内除去下面三类
+--   HOST         宿主目录（默认 Host/，Deuterium 是 Runtime/）—— 预算上仍算在组件核心里
+--   INTEGRATION  顶层 Integration/
+--   TEST         SelfTest.luau（在哪个目录都算）与 tests/<组件>/**
+-- HOST% = HOST ÷ (PURE + HOST)：组件核心里有多少行贴着引擎、因而无头测不到。
+--
 -- 用法：
 --   lune run scripts/loc-budget.luau             # 报告
 --   lune run scripts/loc-budget.luau --release   # release 分支：不达标则阻断
@@ -27,6 +34,7 @@ local process = require("@lune/process")
 local Manifest = require("./carbon-manifest")
 
 type Row = { area: string, actual: number, budget: number }
+type Shape = { name: string, pure: number, host: number, integration: number, test: number }
 
 -- ---------- 纯函数（自检直接测它们） ----------
 
@@ -76,6 +84,56 @@ local function classify(manifest: typeof(Manifest), path: string): (string, stri
 		return "tools", nil
 	end
 	return "ignore", nil
+end
+
+-- 组件的宿主目录名：默认取 hostDir，个别组件在 hostDirs 里改名。
+local function hostDirOf(manifest: typeof(Manifest), componentName: string): string
+	local m: any = manifest
+	local override = if m.hostDirs ~= nil then m.hostDirs[componentName] else nil
+	return override or m.hostDir or "Host"
+end
+
+-- 仓库相对路径 → 在组件标准形状里属于哪一列。返回 列, 组件名?
+--   "pure" | "host" | "integration" | "test" | "none"
+-- 与 classify 的关系：classify 的 "core" 在这里拆成 pure 与 host，其余一一对应。
+local function shapeOf(manifest: typeof(Manifest), path: string): (string, string?)
+	local kind, component = classify(manifest, path)
+	if component == nil or kind == "e2e" or kind == "tools" then
+		return "none", nil
+	end
+	if kind ~= "core" then
+		return kind, component
+	end
+	local rest = string.sub(path, #manifest.root + 2)
+	local sub = string.match(rest, "^[^/]+/([^/]+)/")
+	if sub == hostDirOf(manifest, component) then
+		return "host", component
+	end
+	return "pure", component
+end
+
+-- 把 { 路径 → 行数 } 按组件 × 形状累加；行的顺序与清单一致。
+local function shapeTally(manifest: typeof(Manifest), lineCounts: { [string]: number }): { Shape }
+	local shapes: { Shape } = {}
+	local byName: { [string]: any } = {}
+	for _, component in manifest.components do
+		local shape: Shape = { name = component.name, pure = 0, host = 0, integration = 0, test = 0 }
+		table.insert(shapes, shape)
+		byName[component.name] = shape
+	end
+	for path, lines in lineCounts do
+		local column, component = shapeOf(manifest, path)
+		if component ~= nil then
+			byName[component][column] += lines
+		end
+	end
+	return shapes
+end
+
+-- 宿主目录占组件核心（pure + host）的比例，0–1；核心为空时是 0。
+local function hostShare(shape: Shape): number
+	local core = shape.pure + shape.host
+	return if core == 0 then 0 else shape.host / core
 end
 
 -- 预算行：每个组件的核心、每层的测试、集成层、端到端、工具。
@@ -208,6 +266,35 @@ local function report(release: boolean): number
 		`不计入：项目条目（{table.concat(Manifest.project, "、")}）{project} 行；example/ 与文档不统计`
 	)
 
+	print("")
+	print("组件形状（只报告；HOST 在预算上算进上表的 core:<组件>）")
+	local header = { "COMPONENT", "PURE", "HOST", "INTEGRATION", "TEST", "HOST%" }
+	print(string.format("%-12s %8s %8s %12s %8s %7s", table.unpack(header)))
+	local sum: Shape = { name = "ALL", pure = 0, host = 0, integration = 0, test = 0 }
+	local shapes = shapeTally(Manifest, counts)
+	table.insert(shapes, sum)
+	for _, shape in shapes do
+		if shape ~= sum then
+			sum.pure += shape.pure
+			sum.host += shape.host
+			sum.integration += shape.integration
+			sum.test += shape.test
+		else
+			print(string.rep("-", 60))
+		end
+		print(
+			string.format(
+				"%-12s %8d %8d %12d %8d %6.1f%%",
+				shape.name,
+				shape.pure,
+				shape.host,
+				shape.integration,
+				shape.test,
+				hostShare(shape) * 100
+			)
+		)
+	end
+
 	local problems = releaseProblems(Manifest, rows, total)
 	if release then
 		if #problems > 0 then
@@ -313,9 +400,68 @@ local function selftest(): boolean
 	expect(#releaseProblems(Manifest, full, fullTotal) == 1, "单个区域跌破 70% 即不达标")
 	expect(#releaseProblems(Manifest, full, fullTotal - 1) == 2, "合计差 1 行也不达标")
 
+	-- 组件形状
+	local function shapeKind(path: string): string
+		local column, component = shapeOf(Manifest, path)
+		return if component ~= nil then `{column}:{component}` else column
+	end
+	local src = "src/ReplicatedStorage/"
+	expect(shapeKind(src .. "Tin/Buffer.luau") == "pure:Tin", "形状：核心")
+	expect(shapeKind(src .. "Tin/Host/Clock.luau") == "host:Tin", "形状：Host/")
+	expect(shapeKind(src .. "Tin/Sub/Host/X.luau") == "pure:Tin", "形状：只认顶层 Host/")
+	expect(shapeKind(src .. "Tin/Host.luau") == "pure:Tin", "形状：Host 文件不算")
+	expect(shapeKind(src .. "Tin/Hosting/X.luau") == "pure:Tin", "形状：目录名必须整段相等")
+	expect(shapeKind(src .. "Deuterium/Runtime/Platform/A.luau") == "host:Deuterium", "形状：改名")
+	expect(shapeKind(src .. "Deuterium/Host/A.luau") == "pure:Deuterium", "形状：改名后 Host/ 普通")
+	expect(shapeKind(src .. "Tin/Runtime/A.luau") == "pure:Tin", "形状：别人的改名不外溢")
+	expect(shapeKind(src .. "Tin/Host/SelfTest.luau") == "test:Tin", "形状：宿主内自检")
+	expect(shapeKind(src .. "Tin/Integration/P.luau") == "integration:Tin", "形状：集成层")
+	expect(shapeKind("tests/Tin/Buffer.luau") == "test:Tin", "形状：tests/<组件>/")
+	expect(shapeKind("tests/run.luau") == "none", "形状：端到端不属于任何组件")
+	expect(shapeKind("scripts/x.luau") == "none", "形状：工具不属于任何组件")
+	expect(shapeKind(src .. "Debug.luau") == "none", "形状：项目条目不属于任何组件")
+
+	local shapeCounts = {
+		[src .. "Tin/Buffer.luau"] = 60,
+		[src .. "Tin/Host/Clock.luau"] = 20,
+		[src .. "Tin/Host/SelfTest.luau"] = 9,
+		[src .. "Tin/Integration/P.luau"] = 4,
+		[src .. "Deuterium/Runtime/A.luau"] = 30,
+		[src .. "Deuterium/Core/B.luau"] = 10,
+		["tests/Tin/Buffer.luau"] = 6,
+		["tests/run.luau"] = 3,
+	}
+	local shapes = shapeTally(Manifest, shapeCounts)
+	local shapeByName: { [string]: Shape } = {}
+	for _, shape in shapes do
+		shapeByName[shape.name] = shape
+	end
+	local tin, deuterium = shapeByName.Tin, shapeByName.Deuterium
+	expect(#shapes == #Manifest.components, "形状：每个组件一行")
+	expect(tin.pure == 60 and tin.host == 20, "形状：核心与宿主目录分开累加")
+	expect(tin.integration == 4 and tin.test == 15, "形状：集成层与自检分开累加")
+	expect(deuterium.pure == 10 and deuterium.host == 30, "形状：改名的宿主目录累加")
+	expect(hostShare(tin) == 0.25 and hostShare(deuterium) == 0.75, "形状：宿主目录占比")
+	expect(hostShare(shapeByName.Neon) == 0, "形状：空组件的占比是 0 而不是 NaN")
+
+	-- 两张表必须对得上：pure + host = 预算表的 core，其余两列各自求和后相等
+	local budgetByArea: { [string]: number } = {}
+	for _, row in (tally(Manifest, shapeCounts)) do
+		budgetByArea[row.area] = row.actual
+	end
+	local integrationSum, mismatched = 0, 0
+	for _, shape in shapes do
+		integrationSum += shape.integration
+		if shape.pure + shape.host ~= budgetByArea[`core:{shape.name}`] then
+			mismatched += 1
+		end
+	end
+	expect(mismatched == 0, "形状：pure + host 等于预算表的 core")
+	expect(integrationSum == budgetByArea["integration"], "形状：集成层合计与预算表一致")
+
 	if #failures == 0 then
 		print(
-			`[selftest] 通过：{cases} 例（行数 5 · 归类 12 · 预算自洽 1 · 累加 4 · release 判定 5）`
+			`[selftest] 通过：{cases} 例（行数 5 · 归类 12 · 预算自洽 1 · 累加 4 · release 判定 5 · 形状 22）`
 		)
 		return true
 	end
