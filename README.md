@@ -1,93 +1,48 @@
-# Framework + SQL
+# Carbon
 
+Carbon 是一套面向 Roblox（Luau）的综合基础设施，由 19 个平级组件组成，分四层，只许向下依赖。规模目标是全部代码合计 300,000 行。
 
+总图在 [`.plan/CARBON.md`](.plan/CARBON.md)：沿用的约束、组件清单、分层、预算、推进次序、待决事项和进度。
 
-## Getting started
+## 组件
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+整体叫 Carbon，内部每个组件用一个元素命名。
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| 层 | 组件 |
+| --- | --- |
+| L3 分布式与对抗 | `Cesium` 同步引擎 · `Copper` 集群层 · `Sodium` 消息队列 · `Boron` 反作弊 |
+| L2 领域引擎 | `TritiumSQL` SQL · `Mercury` KV/缓存 · `Titanium` 物理引擎 · `Bismuth` 体素/地形 · `Silicon` AI 引擎 · `Gallium` 动画引擎 |
+| L1 运行时底座 | `Deuterium` Framework · `Helium` ECS · `Uranium` 并行作业 · `Vanadium` 脚本虚拟机 · `Phosphorus` 可观测 |
+| L0 纯库 | `Platinum` 数学库 · `Tin` 序列化 · `Krypton` 压缩与加密 · `Neon` 控制台打印 |
 
-## Add your files
+**当前状态**：工程骨架已搭好。`Deuterium` 与 `TritiumSQL` 有旧代码（约 6,600 行），其余 17 个组件只有目录和一页范围说明。`Deuterium` 与 `TritiumSQL` 是氢的同位素而不是元素，是否改名尚未决定。
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## 目录
 
+| 位置 | 内容 |
+| --- | --- |
+| `src/ReplicatedStorage/<组件>/` | 19 个组件，每个一个目录 |
+| `scripts/` | 门禁脚本。`carbon-manifest.luau` 是组件清单（层次、依赖、预算）的机器可读出处 |
+| `tests/` | headless 测试入口（在 Lune 里跑，不需要 Roblox Studio） |
+| `.plan/` | 计划层：`CARBON.md` 是总图，其余是 Carbon 之前的计划，约束仍有效 |
+| `docs/cert/` | DO-178C（DAL C）认证线的证据 |
+| `example/` | 只作参考的第三方库 Scribe 与 QuickZone，不是 Carbon 的一部分 |
+| `AGENTS.md` · `MEMORY.md` | 协作约定与环境事实 |
+
+## 常用命令
+
+工具链由 `rokit.toml` 固定（rojo、lune、stylua、luau-lsp）。
+
+```bash
+lune run tests/run.luau                         # headless 测试
+lune run scripts/carbon-deps-check.luau         # 组件依赖方向
+lune run scripts/loc-budget.luau                # 行数记分板
+stylua --config-path stylua.toml --check src scripts
+rojo build default.project.json -o place.rbxlx
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/vospek/roblox-dev/framework.git
-git branch -M main
-git push -uf origin main
+
+CI 支持 GitLab 与 GitHub 两个平台，两边都只调 `scripts/ci.sh`；完整的门禁列表就在这个脚本里：
+
+```bash
+bash scripts/ci.sh all    # 或单独跑 lint / types / build / test / cert
 ```
-
-## Integrate with your tools
-
-* [Set up project integrations](https://gitlab.com/vospek/roblox-dev/framework/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.

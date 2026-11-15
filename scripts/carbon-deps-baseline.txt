@@ -1,0 +1,29 @@
+# 依赖方向门禁的既有违规登记（棘轮）—— scripts/carbon-deps-check.luau 的输入。
+#
+# 格式：<允许条数> <KIND> <文件路径>；'#' 起始为注释。
+# 规则：**只许减少**。整改掉一条就把这里同步调低（门禁会提示「基线已过时」）；
+#       新增违规不得靠往这里加行来放行 —— 那需要先改 .plan/CARBON.md 的架构决策。
+#
+# 现有条目的来历（2026-11-14，Carbon S0）：
+#   OUTSIDE …Debug     Deuterium 经遗留垫片 src/ReplicatedStorage/Debug.luau 打印 → S2/S3 换成 Console 后清零
+#   OUTSIDE …Configs   Deuterium 读取项目配置 Configs/Deuterium/FeatureFlags → 改为注入后清零
+#   UNTRACEABLE        PhysicsProxy 经局部变量 require(Platform.ServiceLocator) → 改成 script 相对链后清零
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Container/Kernel.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Container/ScopeContainer.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Container/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Lifecycle/ModuleLoader.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Lifecycle/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Lifecycle/ShutdownManager.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Core/Reflection/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Extensions/Demo.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Net/Core/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Net/Processing/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Net/Security/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Runtime/Environment/FeatureFlags.luau
+2 OUTSIDE src/ReplicatedStorage/Deuterium/Runtime/Environment/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Runtime/Interop/ExternalBridge.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Runtime/Interop/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Runtime/Platform/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Testing/SelfTest.luau
+1 OUTSIDE src/ReplicatedStorage/Deuterium/Testing/TestRunner.luau
+1 UNTRACEABLE src/ReplicatedStorage/Deuterium/Runtime/Platform/PhysicsProxy.luau

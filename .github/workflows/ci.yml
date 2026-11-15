@@ -1,0 +1,69 @@
+# CI（GitHub Actions）—— 与 .gitlab-ci.yml 等价，两者都只调 scripts/ci.sh。
+# 要加减门禁，改 scripts/ci.sh；不要在这里直接写命令。
+#
+# 工具链由仓库根的 rokit.toml 固定：rojo · lune · stylua · luau-lsp。
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: ${{ matrix.stage }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # lint/types/build/test 对应 GitLab 的四个阶段；cert 是认证线，单独一个 job
+        stage: [lint, types, build, test, cert]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache rokit tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.rokit
+          key: rokit-${{ runner.os }}-${{ hashFiles('rokit.toml') }}
+
+      - name: Install toolchain (rokit)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -x "$HOME/.rokit/bin/rokit" ]; then
+            curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+          fi
+          echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
+          "$HOME/.rokit/bin/rokit" install --no-trust-check
+
+      - name: Run gate
+        env:
+          # release/* 分支上 LOC 记分板从「只报告」变为「阻断」（门禁 8）
+          CARBON_RELEASE: ${{ startsWith(github.ref_name, 'release/') && '1' || '0' }}
+        run: bash scripts/ci.sh ${{ matrix.stage }}
+
+      - name: Upload place file
+        if: matrix.stage == 'build'
+        uses: actions/upload-artifact@v4
+        with:
+          name: place
+          path: place.rbxlx
+          retention-days: 7
+
+      - name: Upload certification evidence
+        if: matrix.stage == 'cert' || matrix.stage == 'lint'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cert-evidence-${{ matrix.stage }}
+          path: |
+            docs/cert/TRACE.md
+            docs/cert/verify/
+            docs/cert/coverage/
+          retention-days: 28
