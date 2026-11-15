@@ -1,5 +1,9 @@
 # Plan of Record — 宪法
 
+> ⚠ **2026-11-14：本项目已扩为 Carbon（19 个平级组件，30 万行）。总图是 `CARBON.md`，与本文件冲突时以 `CARBON.md` 为准。**
+> 本文件的不变量（§1）与门禁（§2）继续有效；`CARBON.md` §1.2 列出了措辞需要改写的几条（I9 / I10 / I14 / I16 / I20 / I21、门禁 6 / 8）。
+> §5 的进度登记与 100k 行预算是 Carbon 之前的状态，保留作历史。
+
 > 仓库：`gitlab.com/vospek/roblox-dev/framework`
 > 本目录是**计划层**（排期 / 边界 / 验收 / 决策）。规格层：`../Deuterium/Deuterium.md`（框架规格）、`TritiumSQL.md`（SQL 计划）。
 > 原 `Text File.txt`（SQL 原始设想）已由 `TritiumSQL.md` 取代并**删除**（commit `5d4fabe`）—— 历史里仍可查。
@@ -19,6 +23,7 @@
 **写码前只读 1 和 6**；改接口时读 2 和 5；**动认证范围内任何文件时先读 7**。
 
 | 8 | **`THIRDPARTY.md`** | **第三方集成契约**：Scribe/QuickZone 的实测事实 · **所有权划分表** · 适配器（I20）· 不变量豁免登记 · **不计入 100k 的规则** · 审计义务 |
+| 0 | **`CARBON.md`** | **Carbon 总图（现行最高层文件）**：19 个平级组件清单 · 四层依赖规则 · 与既有 `Dr.*` 的重叠处置 · 规模粗估 · 待决事项 `P1–P7` |
 
 > ⚠ `CERT.md` 是**约束性**的：它把范围砍到 ≤12k 行（认证线），并把 C1–C6 插到所有功能 Wave **之前**。
 > ⚠ `THIRDPARTY.md` 同样约束性：它决定了 `Dr.Data`/`Dr.State` 的哪些波次要**取消**（不重复造）。
@@ -87,6 +92,7 @@
 | **D12** | **TritiumSQL 的发布依赖** | ① 依赖 Deuterium FOUNDATION ② 自带错误类型 | 纵切证实 Tri→Dr.FOUNDATION 可行；倾向 ①（少一份错误实现） | **OPEN** | T3 之前 |
 | **D13** | **SQL 错误的最终形状** | ① 扩 `DrError`（动认证范围）② Tri 侧 `SqlError` 包一层 | 倾向 ②（不动认证范围的 `CoreTypes`） | **OPEN** | T3 之前 |
 | D10 | 合规目标定性 | 适航级全合规 / 航空级可靠性工程 | **可审查的航空级可靠性工程，保留 DO-178C 目标结构与升级路径**（理由与四项裁剪：`docs/cert/HAZARD.md` §1）。升级为全合规是**加法**而非重写 | **DECIDED** | — |
+| **D14** | **平台范围与总名** | 仅 Framework + SQL / 扩为多组件平台 | **扩为 19 个平级组件，总名 `Carbon`，合计 30 万行**（用户 2026-11-14）。Framework 与 SQL 在旧代码上继续改；Scribe / QuickZone 只作参考、不再是运行期依赖（原 D6 / D11 / D2-bis 的「经适配器使用」随之作废）。组件一律以元素命名；CI 双平台（GitLab + GitHub，共用 `scripts/ci.sh`）；认证范围可扩到 L0 库的核心子集。细节与待决项见 `CARBON.md` | **DECIDED** | — |
 
 ## 4. 关键路径
 

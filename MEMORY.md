@@ -7,6 +7,10 @@
 
 ## 1. 运行期外部依赖（门禁 6：只允许 Scribe / PlayerState / QuickZone）
 
+> ⚠ **2026-11-14 起本节只是历史**：Carbon 决定 Scribe 与 QuickZone **只作参考**，不再是运行期依赖（`.plan/CARBON.md` §1.4）。
+> 两个库的原件、审计报告、锁文件、许可文本现在在 `example/`（`example/src/ReplicatedStorage/{Scribe,QuickZone}/`、`example/docs/thirdparty/`、`example/scripts/thirdparty-audit.luau`）。
+> 下文的路径是搬动之前的写法。吸收它们的能力时仍要登记来源与许可（MIT；ProfileStore 分支为 Apache-2.0）。
+
 | 依赖 | 规格声称的状态 | **审计实测结论** | 版本/来源 | 审计人 | 结论 |
 | --- | --- | --- | --- | --- | --- |
 | **Scribe** | 「已内置 `Libraries/Scribe`，**日志/观测**，⚠️ 待审计」 | **以 `Scribe-main` 上游为源，已融合进 `src/ReplicatedStorage/Scribe/`（46 文件 / 42,077 行，版本 2.6.1）**。实测事实：① 它**不是日志库**，而是**玩家数据/复制/经济/排行榜库**（自带 `Internal/Store/ProfileStore.luau` = Apache-2.0 fork）—— 规格对它的角色描述**错了**（已在 THIRDPARTY §2 划清所有权）；② 23 文件有 `game:GetService(`（合计 46 处）；③ **后门面 0 违规**（无 `loadstring`/`getfenv`/`setfenv`/数字 `require`/`_G.`/网络出口；`HttpService` 仅用于 `JSONEncode`/`GenerateGUID`） | **v2.6.1**（`Internal/Version.luau`）+ 内容哈希 `3d797da3` | 机器审计（`scripts/thirdparty-audit.luau`） | ✅ **可经适配器使用**（证据 `docs/thirdparty/AUDIT.md`） |
@@ -99,6 +103,17 @@
 | PATH 上 `~/.aftman/bin` 早于 `~/.rokit/bin`，且 aftman 的 4 个 shim 因其全局 manifest 里对应行被注释而**全部报错** | 裸命令 `rojo`/`stylua`/`luau-lsp` 会命中坏 shim | 用 tool-storage 绝对路径（见 `AGENTS.md` §3） |
 | git 已装守卫：禁直提 `main`、subject ≤72 字符 | 提交与常规习惯不同 | 功能分支 + heredoc 式消息 |
 | `Text File.txt` 与 `.mcp.json` | 仓库根状态曾未定 | **已解决**：用户 commit `5d4fabe` 同时提交了 `.mcp.json` 与 `Text File.txt` 的删除。相关文档引用已同步更正（`Text File.txt` 由 `TritiumSQL.md` 取代，历史可查） |
+
+### 3.1 云端沙箱里装不上工具链时的替代做法（2026-11-14，Carbon S0 实测）
+
+| 事实 | 处置 |
+| --- | --- |
+| GitHub 发布包的下载域名（`release-assets.githubusercontent.com`）被拦，`rokit install` 与手动下载都失败；`github.com` / `codeload.github.com` / `registry.npmjs.org` 可用 | 见下两行 |
+| 官方 Luau 可以从源码编：`codeload.github.com/luau-lang/luau/tar.gz/refs/tags/0.747`，`make config=release luau`（两核约 2 分钟）。它的 CLI 自带 `loadstring`/`setfenv`，而门禁脚本只用到 `@lune/{fs,process,serde,task}` 的十来个函数 | 写一个薄模拟层即可跑全部 `lune run …`。在旧项目上对照过：结果与 `STEPS.md` 登记的数字一致，生成的 `TRACE.md`/`verify/*.md` 逐字相同。**模拟层的 JSON 键序与 Lune 不同**，所以 `docs/cert/coverage/*.json` 不要提交它的产物 |
+| StyLua 有 npm 的 wasm 包 `@johnnymorganz/stylua@2.6.0`（`-bin` 包要下载发布包，不行） | 用 `formatCode` 自己写一个 `--check`；配置对象是一次性的，每个文件要新建 |
+| `rojo`、`luau-lsp` 没有可用来源 | 结构构建与类型检查在这种环境下**无法验证**，要如实写明 |
+
+这些只是指示性结果，不能替代真工具链；模拟层没有进仓库。
 
 ## 3.5 vendor 进仓库的外部产物（需登记来源，便于复现与审计）
 

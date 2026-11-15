@@ -1,21 +1,31 @@
 {
-  "name": "framework",
+  "name": "Carbon",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
-
+      "Platinum": { "$path": "src/ReplicatedStorage/Platinum" },
+      "Tin": { "$path": "src/ReplicatedStorage/Tin" },
+      "Krypton": { "$path": "src/ReplicatedStorage/Krypton" },
+      "Neon": { "$path": "src/ReplicatedStorage/Neon" },
       "Deuterium": { "$path": "src/ReplicatedStorage/Deuterium" },
+      "Vanadium": { "$path": "src/ReplicatedStorage/Vanadium" },
+      "Helium": { "$path": "src/ReplicatedStorage/Helium" },
+      "Phosphorus": { "$path": "src/ReplicatedStorage/Phosphorus" },
+      "Uranium": { "$path": "src/ReplicatedStorage/Uranium" },
       "TritiumSQL": { "$path": "src/ReplicatedStorage/TritiumSQL" },
+      "Titanium": { "$path": "src/ReplicatedStorage/Titanium" },
+      "Silicon": { "$path": "src/ReplicatedStorage/Silicon" },
+      "Bismuth": { "$path": "src/ReplicatedStorage/Bismuth" },
+      "Gallium": { "$path": "src/ReplicatedStorage/Gallium" },
+      "Mercury": { "$path": "src/ReplicatedStorage/Mercury" },
+      "Cesium": { "$path": "src/ReplicatedStorage/Cesium" },
+      "Copper": { "$path": "src/ReplicatedStorage/Copper" },
+      "Boron": { "$path": "src/ReplicatedStorage/Boron" },
+      "Sodium": { "$path": "src/ReplicatedStorage/Sodium" },
       "Configs": { "$path": "src/ReplicatedStorage/Configs" },
-
-      "Debug": { "$path": "src/ReplicatedStorage/Debug.luau" },
-
-      "Scribe": { "$path": "src/ReplicatedStorage/Scribe" },
-      "QuickZone": { "$path": "src/ReplicatedStorage/QuickZone" }
+      "Debug": { "$path": "src/ReplicatedStorage/Debug.luau" }
     },
-
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "DeuteriumServer": { "$path": "src/ServerScriptService" }

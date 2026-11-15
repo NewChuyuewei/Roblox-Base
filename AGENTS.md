@@ -1,6 +1,7 @@
 # AGENTS.md — 在本仓库工作的约定
 
-> 面向 AI agent 与人类协作者。**先读这里，再读 `.plan/`。**
+> 面向 AI agent 与人类协作者。**先读这里，再读 `.plan/CARBON.md`。**
+> 本仓库是 **Carbon**：19 个平级组件的综合基础设施（总图 `.plan/CARBON.md`）。本文件写于 Carbon 之前，2026-11-14 按 Carbon 更新了 §1、§3 的开头和第三方规则；其余小节仍是旧内容，仍然适用。
 > 本文件只管「怎么做」；「为什么」在 `.plan/`，合规证据在 `docs/cert/`。
 
 ---
@@ -9,20 +10,21 @@
 
 | 位置 | 内容 |
 | --- | --- |
+| `src/ReplicatedStorage/<组件>/` | **19 个 Carbon 组件**，每个一个目录。清单、层次、依赖、预算在 `scripts/carbon-manifest.luau`；17 个新组件目前只有 `README.md` |
 | `src/ReplicatedStorage/Deuterium/` | 框架（微内核/生命周期/网络/会话态/复制/安全） |
 | `src/ReplicatedStorage/TritiumSQL/` | 数据库引擎（页/B+树/事务/WAL/查询） |
 | `src/ReplicatedStorage/Configs/` | 项目配置（`Deuterium/init.luau` folder-module + `FeatureFlags.luau`） |
 | `src/ReplicatedStorage/Debug.luau` | 遗留 require 垫片（绝对路径）——见本文件 §5 |
-| `src/ReplicatedStorage/{Scribe,QuickZone}/` | **第三方依赖树**（⚠ 未审计，见 `MEMORY.md` §1.1）；不得被认证核心 require |
+| `example/` | **只作参考的第三方库**：Scribe、QuickZone 的原件与审计文档。不随 Carbon 发布，**任何组件不得 require** |
 | `src/ServerScriptService/` | 服务端专属（认证范围之外） |
 | `.plan/` | **计划层**：不变量 · 门禁 · 决策 · 风险 · 排期 · 执行步骤 |
 | `docs/cert/` | **DO-178C 认证线证据**（DAL C，≤12k 行子集） |
 | `docs/headless.md` | headless 能力基线（测试与覆盖怎么做） |
 | `scripts/` · `tests/` · `types/` | 门禁脚本（Lune/bash）· headless 测试入口 · vendor 的 Roblox 类型定义 |
 
-> **第三方树的三条规则**：① 不进 stylua/analyze 门禁（改它们排版后无法与上游 diff 比对）；② 认证核心不得 require 它们（I16，门禁 10 会拦）；③ 使用前必须走完 `MEMORY.md` §1.1 的审计缺口清单。
+> **组件之间的四条规则**（`scripts/carbon-deps-check.luau` 强制）：① 只能 require 更低层、且在清单里声明过的组件；② 同层组件与端口依赖只能在 `<组件>/Integration/` 里接线；③ L0 组件（`Platinum`/`Tin`/`Krypton`/`Neon`）不得触碰引擎；④ 不得 require Scribe/QuickZone，组件根目录下不得出现清单外的条目。既有违规登记在 `scripts/carbon-deps-baseline.txt`，只许减少。
 
-**阅读顺序**：`.plan/README.md`（宪法）→ `.plan/STEPS.md`（当前该做哪一步）→ 需要动某一层时读对应的 `Deuterium.md` / `TritiumSQL.md` / `CERT.md`。
+**阅读顺序**：`.plan/CARBON.md`（总图，冲突时以它为准）→ `.plan/README.md`（不变量与门禁的定义）→ `.plan/STEPS.md`（当前该做哪一步）→ 需要动某一层时读对应的 `Deuterium.md` / `TritiumSQL.md` / `CERT.md`。
 
 ## 2. 硬规则（违反会被 CI 或评审挡住）
 
@@ -37,6 +39,26 @@
 | 7 | **工具非 0 退出即失败，即使没有输出** | 曾把 `stylua` 的 `exit=2`＋零输出误读成"全部合格" |
 
 ## 3. 已验证的工具调用（照抄，别猜）
+
+CI 的命令清单只有一处：`scripts/ci.sh`。GitLab CI 与 GitHub Actions 都只调它，**加减门禁改它，不要改两份 YAML**。
+
+```bash
+bash scripts/ci.sh lint      # 也可以是 types / build / test / cert / all
+```
+
+组件以元素命名（`Platinum` = 数学库，`Krypton` = 压缩与加密……对照表在 `.plan/CARBON.md` §2.1，或看 `scripts/loc-budget.luau` 输出的 `ROLE` 列）。
+
+Carbon 新增的两道门禁（2026-11-14）：
+
+```bash
+"$LUNE" run scripts/carbon-deps-check.luau                 # 依赖方向（CARBON.md §3）
+"$LUNE" run scripts/carbon-deps-check.luau --selftest
+"$LUNE" run scripts/loc-budget.luau                        # 门禁 8：LOC 记分板（日常只报告）
+"$LUNE" run scripts/loc-budget.luau --release              # release 分支：不达标则 exit 1
+"$LUNE" run scripts/loc-budget.luau --selftest
+```
+
+格式检查的范围现在是 `src scripts`（原来是 `$DS $TS scripts`）。下面是旧内容，路径是 Windows 写法：
 
 ```bash
 # 工具在 tool-storage 里的真实路径（rokit 的 bin 是 shim，需要目录内有 rokit.toml）

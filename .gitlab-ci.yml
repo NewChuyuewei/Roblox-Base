@@ -1,6 +1,9 @@
-# CI —— 四阶段，对应用户项目计划的门禁（.plan/README.md §2）
+# CI（GitLab）—— 四阶段，对应门禁（.plan/README.md §2 与 .plan/CARBON.md）
 #
-#   lint  门禁 3（部分）与 5、10：stylua · P0 棘轮 · 认证范围守卫
+# 双平台：本文件与 .github/workflows/ci.yml 等价，两者都只调 scripts/ci.sh。
+# 要加减门禁，改 scripts/ci.sh；不要在这里直接写命令。
+#
+#   lint  门禁 3（部分）与 5、8、10–12：stylua · P0 棘轮 · 认证范围守卫 · 依赖方向 · LOC 记分板
 #   types 门禁 3：luau-lsp analyze（需 Roblox 类型定义，已 vendor 进仓库）
 #   build 门禁 1：rojo build
 #   test  门禁 2：headless 测试（Lune + 拓扑序 loader，无需 Roblox）
@@ -32,45 +35,21 @@ default:
       - .rokit/
     policy: pull-push
 
+# 每个 job 只调 scripts/ci.sh：命令清单只有那一处，GitHub Actions 用的是同一份。
 lint:
   stage: lint
   script:
-    # 格式化：认证范围内只读（stylua 会改写源码，而源码是受控数据）
-    # 第三方树（Scribe / QuickZone）不进格式化门禁：它们不是我们的代码，
-    # 改它们的排版只会让上游 diff 无法比对（审计与更新都靠原始 diff）。
-    - stylua --config-path stylua.toml --check src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL scripts
-    # P0 规约棘轮：只允许下降
-    - bash scripts/p0-check.sh
-    # 门禁 10（I16）：认证范围不得触碰引擎/网络/非认证层，且依赖必须在范围内
-    - lune run scripts/cert-scope-check.luau
-    # 第三方审计（I20 + D11 §7 五步）：版本锁·后门面·可达闭包·只经适配器
-    - lune run scripts/thirdparty-audit.luau
-    # 门禁 11（I18/REQ-STD §5）：需求 · 代码 · 用例 四向追溯；同时生成 docs/cert/TRACE.md
-    - lune run scripts/cert-trace-check.luau
-    # 门禁 12（CERT.md §7.2）：认证范围 statement 覆盖 + 插桩器自检（C4）
-    # 自研插桩器：sethook 在 Lune 不存在 → 源码插桩 + 括号深度 + 编译裁判（见 scripts/instrument.luau）
-    - lune run scripts/coverage.luau
-    - lune run scripts/coverage.luau --selftest
-    # 门禁必须先证明自己会失败
-    - lune run scripts/cert-scope-check.luau --selftest
-    - lune run scripts/thirdparty-audit.luau --selftest
-    - lune run scripts/cert-trace-check.luau --selftest
+    - bash scripts/ci.sh lint
 
 types:
   stage: types
   script:
-    - rojo sourcemap default.project.json -o sourcemap.json
-    # types/globalTypes.None.d.luau 已随仓库固定在版本控制里（来源见 MEMORY.md），
-    # 所以这一步**不需要联网**，结果可复现。
-    # scripts/ 不在分析范围内：它们是 Lune 宿主脚本，require("@lune/*") 无法被解析。
-    # 同样只分析我们的代码。第三方树的类型问题（Scribe 自带说明：需要新版类型求解器）
-    # 不是本项目的可关闭项，混在一起会让门禁失去信号。
-    - luau-lsp analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL
+    - bash scripts/ci.sh types
 
 build:
   stage: build
   script:
-    - rojo build default.project.json -o place.rbxlx
+    - bash scripts/ci.sh build
   artifacts:
     paths:
       - place.rbxlx
@@ -79,15 +58,13 @@ build:
 test:
   stage: test
   script:
-    # 只跑能在无引擎环境加载的 SelfTest；引擎相关的会被列为 SKIP 并计数（不是通过）
-    - lune run tests/run.luau
+    - bash scripts/ci.sh test
 
 # 认证线**单独一个 job**：两条线的报告不得合并（CERT.md §9.2 / STEPS §二点五 规则 2）。
-# 它跑的是 tests/cert/（不 require 任何 SelfTest/TestKit），产物落在 docs/cert/verify/。
 cert:
   stage: test
   script:
-    - lune run tests/cert/run.luau
+    - bash scripts/ci.sh cert
   artifacts:
     paths:
       - docs/cert/TRACE.md
