@@ -214,11 +214,13 @@ L0 纯库（零依赖） Platinum 数学 · Tin 序列化 · Krypton 压缩与�
 
 > `TritiumSQL` 与 `Mercury` 现在的清单依赖 `Deuterium`，本来打算经它的运行时端口拿 DataStore / MemoryStore。方案 B 下它们可以各自带 `Host/`；是否因此去掉对 `Deuterium` 的依赖，立项时定（去掉会让它们更独立，但弹性与限流要自己接）。
 
-**门禁怎么改（P1.W3 的内容，尚未实现）**
+**门禁（P1.W3，已实现，2026-11-14）**
 
-- `scripts/carbon-deps-check.luau`：`ENGINE_IN_L0` 推广为 `ENGINE_OUTSIDE_HOST`（H1）；新增 `CORE_REQUIRES_HOST`（H3）与 `HOST_CROSS`（H4）；自检各加正反用例。
-- `scripts/carbon-manifest.luau`：新增 `hostDir`（默认 `Host`，`Deuterium` 为 `Runtime`）。
-- 既有代码的出入：现在 `Deuterium` 里有引擎字面量的非注释行共 25 行，其中 17 行在 `Runtime/` 内，**8 行在外面**（`Net/` 7 行、`Core/` 1 行；其中 7 行在 `SelfTest.luau` 里）；`TritiumSQL` 为 0。这 8 行进基线，只许减少。（数字来自对 `engineLiterals` 的文本搜索，以门禁实现后的输出为准。）
+- `scripts/carbon-deps-check.luau`：`ENGINE_IN_L0` 推广为 `ENGINE_OUTSIDE_HOST`（H1，所有层，每行报一次）；新增 `CORE_REQUIRES_HOST`（H3）与 `HOST_CROSS`（H4）。H4 实现得比原文宽：**任何**文件 require 别的组件的宿主目录都算，不只是宿主目录之间——否则核心可以经别人的 `Host/` 把引擎带进来。
+- `scripts/carbon-manifest.luau`：`hostDir`（默认 `Host`）、`hostDirs`（`Deuterium` → `Runtime`）、`hostRequirable`。
+- **登记的例外：`Deuterium` 在 `hostRequirable` 里。** 它的 `Runtime/` 本来就是全框架取引擎服务的公开端口层（旧 I10 的设计），框架各处都直接 require 它；所以 H3 对它不适用，别的组件 require `Deuterium/Runtime/` 也不算 H4。H1 对它照常适用。这是我在实现时做的判断：不这样做就要把框架里所有对 `Runtime/` 的引用登记成待还的违规，而那并不是债。新增例外须先改本文件。
+- 既有出入：`Deuterium` 在 `Runtime/` 之外有 **5 行**引擎调用（`HotReload` 1、`LocalBridge` 1、`MockBridge` 1、`NetworkManager` 2），已进基线，只许减少；Phase 6 的「引擎服务封装」Wave 清零。
+- H2、H5、H6 不是静态可查的规则，靠评审与各组件的自检。
 
 ### 3.3 组件的标准形状
 
@@ -488,4 +490,23 @@ PR #1 已合并进 `feat/phase-0.5-slice`（合并提交 `412379e`）。GitHub A
 - 判据二（故意弄坏时注解里能看到用例名）：PR #4 上把 `Net/Security/SelfTest.luau` 的一条断言取反，`test` 阶段失败，注解 `ci.sh test failed` 里直接出现失败的用例名与断言文本；随后还原。
 - 顺带的修正：失败摘要原先会把含「error」字样的 PASS 行也带进来，已在过滤里排除。这条过滤的改动只经过了「全绿」的运行，没有再被一次真实失败检验。
 - 下一个 Wave：`P1.W2`（偶发失败）仍要等它再次出现；可先做 `P1.W3`（`Host/` 门禁）——这是否违反 WIP=1 的顺序，由用户定。
+
+### 代码优化与 P1.W3（2026-11-14）
+
+用户决定：偶发失败无法再现，不再等待；先把代码优化一遍，再做 `P1.W3`。
+
+**优化（PR #5 的第一部分）**。范围是有实际收益的热路径与测试的确定性，没有做全仓库的机械改写：
+
+| 改动 | 说明 |
+| --- | --- |
+| `ReplayGuard` 的随机数环改为真正的环形缓冲 | 原来每接受一个随机数做一次 `table.insert` 加一次 `table.remove(list, 1)`（后者要整体前移，环满之后每次都发生）；现在原地覆盖最旧的槽位，O(1) |
+| `RateLimiter`、`ReplayGuard` 的时间源可注入（`SetClock`，仅测试用） | 生产路径仍用 `os.clock` / `os.time` |
+| `Net/Security/SelfTest.luau` 不再真实等待 | 去掉三处 `task.wait`（共约 1.2 秒）；补了环形缓冲回绕与补充上限的断言 |
+| `PacketQueue.Push` 只量一次长度 | 原来量一次再 `table.insert` |
+| P0 基线 `table.insert(` 26 → 24 | 棘轮随之调低 |
+
+- **没有做的**：其余 `table.insert` 多在启动期的注册路径上，改写没有可测的收益；认证范围内的模块按 I18 不动。没有基准数据，上面的「O(1)」是算法层面的结论，不是实测的耗时。
+- **P1.W2 的状态**：原因仍未证实。去掉真实等待只是去掉了嫌疑，不能证明修的就是那次失败。
+
+**P1.W3**：见 §3.2「门禁」。验证全部在 GitHub 的真工具链上做（本地没有 Lune）：自检通过；故意违规的文件让门禁 exit 1 并报出三类违规；删除后全绿。
 

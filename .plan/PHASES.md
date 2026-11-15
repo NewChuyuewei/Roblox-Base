@@ -80,8 +80,8 @@
 | Wave | 功能 | 具体内容 | 判据 | 状态 |
 | --- | --- | --- | --- | --- |
 | **P1.W1** | CI 稳定性 | 工具链安装带重试；失败时把关键行写进注解与 job 摘要；同一提交不重复触发 | 连续 3 次运行五阶段全绿；故意弄坏一条用例时注解里能看到用例名 | ✅ 2026-11-14：加固后连续 5 次全绿；PR #4 上故意改坏一条用例，注解里直接给出 `[Dr.SelfTest.Security] FAIL rate limiter: cap enforced, rate 0 never refills … 4th rejected`，还原后恢复全绿 |
-| **P1.W2** | 修掉 `test` 的偶发失败 | 定位那次原因不明的失败并修复（嫌疑：`Deuterium/Net/Security/SelfTest.luau` 里依赖真实时间的三个用例） | 定位到具体用例；修复后同一提交重跑 10 次无失败 | 等它再次出现，靠上一条的失败摘要定位 |
-| **P1.W3** | `Host/` 门禁 | 清单加 `hostDir`；门禁新增 `ENGINE_OUTSIDE_HOST`、`CORE_REQUIRES_HOST`、`HOST_CROSS`（总图 §3.2 的 H1、H3、H4） | 三类违规各有正反自检用例；`Deuterium` 的 8 行既有出入进基线；在核心里写一行引擎调用时门禁失败 |  |
+| **P1.W2** | 修掉 `test` 的偶发失败 | 那次原因不明的失败始终没有再现（之后 10 余次运行全绿）。按用户决定不再等待，改为直接去掉嫌疑：`RateLimiter` 与 `ReplayGuard` 的时间源可注入，`Net/Security/SelfTest.luau` 不再真实等待 | 原判据（定位到具体用例）**未达到**；替代判据：安全自检不依赖真实时间，CI 全绿 | ◑ 2026-11-14 已缓解、原因未证实。若再出现，失败摘要会直接给出用例名 |
+| **P1.W3** | `Host/` 门禁 | 清单加 `hostDir`；门禁新增 `ENGINE_OUTSIDE_HOST`、`CORE_REQUIRES_HOST`、`HOST_CROSS`（总图 §3.2 的 H1、H3、H4） | 三类违规各有正反自检用例；`Deuterium` 的 8 行既有出入进基线；在核心里写一行引擎调用时门禁失败 | ✅ 2026-11-14：自检新增 18 例；PR #5 上放入故意违规的文件，门禁报出 `ENGINE_OUTSIDE_HOST`、`CORE_REQUIRES_HOST`、`HOST_CROSS` 各一条并 exit 1，删除后恢复全绿。既有出入实际是 5 行（不是先前估的 8 行：其中 3 行是安全自检里的真实等待，已去掉） |
 | **P1.W4** | 记分板分列 | 记分板按组件的标准形状统计：核心、`Host/`、`Integration/`、自检各一列 | 自检通过；`Host/` 行数占比可见 |  |
 | **P1.W5** | L0 的危害分析 | 为 `Platinum`、`Tin`、`Krypton` 各写失效后果，列出拟进认证范围的候选模块 | `docs/cert/` 新增三节；候选行数加现有范围 ≤12k |  |
 | **P1.W6** | GitLab 实测 | 在 GitLab runner 上跑五个 job；把 release 开关接进 `.gitlab-ci.yml` | 五个 job 通过；`release/*` 上记分板阻断 | **需要用户提供 GitLab 仓库**；没有则挂起，不阻塞后面的 Phase |
