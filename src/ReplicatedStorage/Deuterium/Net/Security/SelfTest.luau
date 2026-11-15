@@ -98,8 +98,8 @@ function SelfTest.RunAll(): boolean
 				end
 				-- ring size 4 → nonces 1,2 evicted; resubmitting 1 is accepted again.
 				expect(ReplayGuard.Remembered("W23.ring") == 4, "ring stays at its size")
-				expect(not ReplayGuard.Verify("W23.ring", "nonce0006", now, nil, 4), "newest still remembered")
-				expect(not ReplayGuard.Verify("W23.ring", "nonce0003", now, nil, 4), "oldest survivor remembered")
+				expect(not ReplayGuard.Verify("W23.ring", "nonce0006", now, nil, 4), "newest kept")
+				expect(not ReplayGuard.Verify("W23.ring", "nonce0003", now, nil, 4), "oldest kept")
 				expect(ReplayGuard.Verify("W23.ring", "nonce0001", now, nil, 4), "evicted nonce re-admitted")
 				-- re-admitting 1 evicted 3 (the oldest), so 3 is accepted again — and evicts 4 in turn.
 				expect(ReplayGuard.Verify("W23.ring", "nonce0003", now, nil, 4), "wraparound evicts oldest")
