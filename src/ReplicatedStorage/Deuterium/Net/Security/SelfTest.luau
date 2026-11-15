@@ -60,11 +60,16 @@ function SelfTest.RunAll(): boolean
 			name = "rate limiter: refills over time",
 			fn = function()
 				RateLimiter.Reset()
+				local t = 100 -- injected clock: no real sleeping, no dependence on timer granularity
+				RateLimiter.SetClock(function()
+					return t
+				end)
 				local key = "W23.refill"
 				expect(RateLimiter.Allow(key, 1, 1, 10000), "drain the single token")
 				expect(not RateLimiter.Allow(key, 1, 1, 10000), "empty right after")
-				task.wait(0.02) -- 20ms at 10000/s = 200 tokens worth, capped at 1
+				t += 0.02 -- 20ms at 10000/s = 200 tokens worth, capped at 1
 				expect(RateLimiter.Allow(key, 1, 1, 10000), "refilled")
+				expect(not RateLimiter.Allow(key, 1, 1, 10000), "refill is capped at 1 token")
 			end,
 		},
 		{
@@ -92,7 +97,14 @@ function SelfTest.RunAll(): boolean
 					)
 				end
 				-- ring size 4 → nonces 1,2 evicted; resubmitting 1 is accepted again.
+				expect(ReplayGuard.Remembered("W23.ring") == 4, "ring stays at its size")
+				expect(not ReplayGuard.Verify("W23.ring", "nonce0006", now, nil, 4), "newest still remembered")
+				expect(not ReplayGuard.Verify("W23.ring", "nonce0003", now, nil, 4), "oldest survivor remembered")
 				expect(ReplayGuard.Verify("W23.ring", "nonce0001", now, nil, 4), "evicted nonce re-admitted")
+				-- re-admitting 1 evicted 3 (the oldest), so 3 is accepted again — and evicts 4 in turn.
+				expect(ReplayGuard.Verify("W23.ring", "nonce0003", now, nil, 4), "wraparound evicts oldest")
+				expect(not ReplayGuard.Verify("W23.ring", "nonce0005", now, nil, 4), "5 not evicted yet")
+				expect(ReplayGuard.Remembered("W23.ring") == 4, "ring still at its size")
 			end,
 		},
 		{
@@ -190,11 +202,15 @@ function SelfTest.RunAll(): boolean
 			name = "rate limiter sweep removes idle buckets",
 			fn = function()
 				RateLimiter.Reset()
+				local t = 100
+				RateLimiter.SetClock(function()
+					return t
+				end)
 				RateLimiter.Allow("W23.sweepA", 1, 1, 0)
 				RateLimiter.Allow("W23.sweepB", 1, 1, 0)
 				local fresh = RateLimiter.Sweep(60)
 				expect(fresh == 0, "fresh buckets survive")
-				task.wait(0.1)
+				t += 0.1
 				local removed = RateLimiter.Sweep(0.05)
 				expect(removed >= 2, "idle buckets removed")
 				expect(RateLimiter.Snapshot("W23.sweepA") == nil, "bucket gone")
@@ -205,11 +221,14 @@ function SelfTest.RunAll(): boolean
 			fn = function()
 				RateLimiter.Reset()
 				ReplayGuard.Reset()
-				local now = os.time()
+				local now = 1000
+				ReplayGuard.SetClock(function()
+					return now
+				end)
 				expect(ReplayGuard.Verify("W23.sweepR", "nonceSWEEP1", now), "ring created")
 				expect(ReplayGuard.Sweep(60) == 0, "fresh ring survives")
 				expect(ReplayGuard.Remembered("W23.sweepR") == 1, "ring alive")
-				task.wait(1.1) -- os.time() has 1s granularity; idle past the 1s stale window
+				now += 2 -- idle past the 1s stale window
 				local removed = ReplayGuard.Sweep(1)
 				expect(removed >= 1, "idle ring removed")
 				expect(ReplayGuard.Remembered("W23.sweepR") == 0, "ring gone")
@@ -219,6 +238,9 @@ function SelfTest.RunAll(): boolean
 
 	for _, entry in tests do
 		local ok, msg = check(entry.name, entry.fn)
+		-- a case may have swapped a clock (and may have failed before restoring it)
+		RateLimiter.SetClock(nil)
+		ReplayGuard.SetClock(nil)
 		record(entry.name, ok, msg)
 	end
 
