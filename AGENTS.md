@@ -23,6 +23,8 @@
 | `scripts/` · `tests/` · `types/` | 门禁脚本（Lune/bash）· headless 测试入口 · vendor 的 Roblox 类型定义 |
 
 > **组件之间的四条规则**（`scripts/carbon-deps-check.luau` 强制）：① 只能 require 更低层、且在清单里声明过的组件；② 同层组件与端口依赖只能在 `<组件>/Integration/` 里接线；③ L0 组件（`Platinum`/`Tin`/`Krypton`/`Neon`）不得触碰引擎；④ 不得 require Scribe/QuickZone，组件根目录下不得出现清单外的条目。既有违规登记在 `scripts/carbon-deps-baseline.txt`，只许减少。
+> **已定、门禁尚未实现**（`.plan/CARBON.md` §3.2）：引擎 API 只许出现在每个组件自己的 `Host/` 目录（`Deuterium` 是既有的 `Runtime/`）；核心代码只认宿主接口，不得 require 自己的 `Host/`。新写的代码现在就按这条来。
+> 每个组件的功能块划分见 `.plan/COMPONENTS.md`。
 
 **阅读顺序**：`.plan/CARBON.md`（总图，冲突时以它为准）→ `.plan/README.md`（不变量与门禁的定义）→ `.plan/STEPS.md`（当前该做哪一步）→ 需要动某一层时读对应的 `Deuterium.md` / `TritiumSQL.md` / `CERT.md`。
 
