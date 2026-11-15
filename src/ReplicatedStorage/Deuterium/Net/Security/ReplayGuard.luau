@@ -3,6 +3,8 @@
 -- Rejects replays of authenticated frames: each authenticated frame carries (nonce, timestamp).
 -- Window: |now - ts| <= windowSecs. Once-only: nonce is consumed on first sight.
 -- Memory discipline: nonces are kept in a bounded ring per subject (no growth).
+-- The ring is a true circular buffer: admitting a nonce is O(1) — the oldest slot is
+-- overwritten in place, nothing is shifted.
 
 local RateLimiter = require(script.Parent.RateLimiter)
 
@@ -12,10 +14,12 @@ local DEFAULT_RING = 64 -- nonces remembered per subject
 local ReplayGuard = {}
 
 export type NonceRing = {
-	list: { string },
+	list: { string }, -- circular storage, at most `sz` slots
 	set: { [string]: boolean },
 	sz: number,
-	last: number, -- os.time() of the last touch; drives Sweep
+	head: number, -- index of the oldest nonce
+	count: number, -- nonces currently remembered (<= sz)
+	last: number, -- clock reading of the last touch; drives Sweep
 }
 
 local _rings: { [string]: NonceRing } = {}
@@ -25,13 +29,21 @@ local _rings: { [string]: NonceRing } = {}
 local _lastKey: string? = nil
 local _lastLimiterKey: string? = nil
 
-local function ringFor(key: string, size: number): NonceRing
+local function systemTime(): number
+	return os.time()
+end
+
+-- Time source. Production always uses os.time; tests swap it via SetClock so that the
+-- window and sweep behaviour can be asserted without sleeping.
+local _now: () -> number = systemTime
+
+local function ringFor(key: string, size: number, now: number): NonceRing
 	local r = _rings[key]
 	if r == nil then
-		r = { list = {}, set = {}, sz = size, last = os.time() }
+		r = { list = table.create(size), set = {}, sz = size, head = 1, count = 0, last = now }
 		_rings[key] = r
 	end
-	r.last = os.time() -- touch: rings stay alive while traffic flows
+	r.last = now -- touch: rings stay alive while traffic flows
 	return r
 end
 
@@ -56,24 +68,27 @@ function ReplayGuard.Verify(
 	end
 
 	local window = windowSecs or DEFAULT_WINDOW
-	local now = os.time()
+	local now = _now()
 	if math.abs(now - ts) > window then
 		return false
 	end
 
-	local ring = ringFor(key, ringSize or DEFAULT_RING)
+	local ring = ringFor(key, ringSize or DEFAULT_RING, now)
 	if ring.set[nonce] then
 		return false -- replay
 	end
 
-	-- consume: push into ring, evict oldest
+	-- consume: remember the nonce; once the ring is full, overwrite the oldest in place
 	ring.set[nonce] = true
-	table.insert(ring.list, nonce)
-	if #ring.list > ring.sz then
-		local oldest = table.remove(ring.list, 1)
-		if oldest ~= nil then
-			ring.set[oldest] = nil
-		end
+	local list = ring.list
+	if ring.count < ring.sz then
+		ring.count += 1
+		list[(ring.head + ring.count - 2) % ring.sz + 1] = nonce
+	else
+		local head = ring.head
+		ring.set[list[head]] = nil
+		list[head] = nonce
+		ring.head = head % ring.sz + 1
 	end
 	return true
 end
@@ -83,7 +98,7 @@ function ReplayGuard.Remembered(key: string): number
 	if ring == nil then
 		return 0
 	end
-	return #ring.list
+	return ring.count
 end
 
 -- Cold-path maintenance: drop rings idle longer than `staleSeconds` (departed players).
@@ -91,7 +106,7 @@ end
 -- that ring is bounded at `sz` nonces, so the abuse cost is capped by design.
 function ReplayGuard.Sweep(staleSeconds: number): number
 	assert(type(staleSeconds) == "number" and staleSeconds > 0, "[Dr.ReplayGuard] staleSeconds must be > 0")
-	local now = os.time()
+	local now = _now()
 	local removed = 0
 	for key, ring in _rings do
 		if now - ring.last >= staleSeconds then
@@ -100,6 +115,10 @@ function ReplayGuard.Sweep(staleSeconds: number): number
 		end
 	end
 	return removed
+end
+
+function ReplayGuard.SetClock(clock: (() -> number)?): () -- Test-only; nil restores os.time
+	_now = clock or systemTime
 end
 
 function ReplayGuard.Reset(): ()

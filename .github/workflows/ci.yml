@@ -75,7 +75,7 @@ jobs:
           [ -f ci.log ] || exit 0
           {
             grep -nE 'FAIL|失败|违规|rror' ci.log \
-              | grep -vE '\] PASS|^[0-9]+:\[PASS\]|intentional|isolated|failed provider|违规 0|失败 0|FAIL 0' | tail -25 || true
+              | grep -vE '\] PASS|^[0-9]+:\[PASS\]| OK *$|intentional|isolated|failed provider|违规 0|失败 0|FAIL 0' | tail -25 || true
             echo '--- tail ---'
             tail -15 ci.log
           } > summary.txt

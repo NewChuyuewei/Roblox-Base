@@ -34,11 +34,13 @@ function PacketQueue.Open(channel: string, maxPayloadBytes: number): Queue
 				slot.dropped += 1
 				return false
 			end
-			if #slot.list >= MAX_PENDING then
+			local list = slot.list
+			local pending = #list -- measured once, reused for the append
+			if pending >= MAX_PENDING then
 				slot.dropped += 1
 				return false
 			end
-			table.insert(slot.list, payload)
+			list[pending + 1] = payload
 			return true
 		end,
 		Flush = function(consume: (payloads: { buffer }) -> ()): number
