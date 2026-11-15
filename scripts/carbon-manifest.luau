@@ -133,7 +133,16 @@ return {
 	-- 任何 require 里都不得出现的名字：只作参考的第三方库（CARBON.md §1.4）。
 	forbidden = { "Scribe", "QuickZone" },
 
-	-- L0 组件不得出现的引擎字面（注释行除外）。
+	-- 宿主目录（CARBON.md §3.2，规则 H1–H4）：每个组件唯一可以出现引擎 API 的地方。
+	hostDir = "Host",
+	-- 按组件改名。Deuterium 的宿主目录是既有的 `Runtime/`（不改名）。
+	hostDirs = { Deuterium = "Runtime" } :: { [string]: string },
+	-- 宿主目录本身就是公开端口层的组件：其核心可以 require 它（H3 不适用），
+	-- 别的组件 require 它也不算跨宿主（H4 不适用）。只有 Deuterium：旧 I10 规定全框架
+	-- 经 `Runtime/` 取引擎服务，这是它既有的设计，不是待还的债。新增条目须先改 CARBON.md。
+	hostRequirable = { "Deuterium" },
+
+	-- 宿主目录之外不得出现的引擎字面（注释行除外）。所有层的组件都适用。
 	engineLiterals = { "game:", "game.", "GetService(", "workspace", "Instance.new(", "task." },
 
 	-- 预算（行）。合计必须等于 total —— loc-budget 的自检会核对。

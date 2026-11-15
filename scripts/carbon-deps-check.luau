@@ -10,10 +10,17 @@
 --   OUTSIDE       require 解析到了任何组件之外（项目配置、遗留垫片、仓库别处）
 --   THIRDPARTY    require 里出现只作参考的第三方库名字
 --   UNTRACEABLE   路径式 / 动态 require：无法静态判定去向
---   ENGINE_IN_L0  L0 组件里出现引擎字面
+--   ENGINE_OUTSIDE_HOST  组件的宿主目录之外出现引擎字面（规则 H1，所有层）
+--   CORE_REQUIRES_HOST   组件的核心 require 了自己的宿主目录（规则 H3）
+--   HOST_CROSS           require 了别的组件的宿主目录（规则 H4）
 --   STRAY         组件根目录下出现清单外的条目（防止第 20 个组件悄悄长出来）
 --   MISSING       清单里的组件没有目录
 --   MANIFEST      清单自身不自洽（依赖不存在 / deps 指向同层或更高层 / ports 指向更高层）
+--
+-- 宿主目录（.plan/CARBON.md §3.2）：每个组件唯一可以出现引擎 API 的地方。默认叫 `Host`，
+-- 清单的 `hostDirs` 可按组件改名（Deuterium 是既有的 `Runtime`）。清单的 `hostRequirable`
+-- 列出宿主目录本身就是公开端口层的组件：它们不受 H3 约束，别的组件 require 它们的
+-- 宿主目录也不算 H4。
 --
 -- 与门禁 10（cert-scope-check）的关系：那一道管「认证范围 ↔ 非认证范围」，
 -- 这一道管「组件 ↔ 组件」。两者的 require 解析语义相同（N 个 Parent 向上 N-1 层）。
@@ -198,25 +205,38 @@ local function auditManifest(manifest: ManifestT): { Finding }
 	return findings
 end
 
--- 路径属于哪个组件（或哪个非组件条目）。返回 组件名?, 是否在 Integration/ 内。
-local function ownerOf(manifest: ManifestT, path: string): (string?, boolean)
+-- 路径属于哪个组件（或哪个非组件条目）。返回 组件名?, 是否在 Integration/ 内, 组件下的第一级目录名?。
+local function ownerOf(manifest: ManifestT, path: string): (string?, boolean, string?)
 	local prefix = manifest.root .. "/"
 	if string.sub(path, 1, #prefix) ~= prefix then
-		return nil, false
+		return nil, false, nil
 	end
 	local parts = split(string.sub(path, #prefix + 1), "/")
-	return parts[1], parts[2] == "Integration"
+	return parts[1], parts[2] == "Integration", parts[2]
+end
+
+-- 组件的宿主目录名：默认 `hostDir`，可被 `hostDirs[组件名]` 覆盖。
+local function hostDirOf(manifest: ManifestT, componentName: string): string
+	local m: any = manifest
+	local override = if m.hostDirs ~= nil then m.hostDirs[componentName] else nil
+	return override or m.hostDir or "Host"
+end
+
+local function hostRequirable(manifest: ManifestT, componentName: string): boolean
+	local m: any = manifest
+	return m.hostRequirable ~= nil and contains(m.hostRequirable, componentName)
 end
 
 -- ---------- 审计核心（check 与 selftest 共用同一条路径） ----------
 local function auditFile(manifest: ManifestT, path: string, source: string): { Finding }
 	local findings: { Finding } = {}
 	local byName = index(manifest)
-	local ownerName, inIntegration = ownerOf(manifest, path)
+	local ownerName, inIntegration, ownerSub = ownerOf(manifest, path)
 	local owner = if ownerName ~= nil then byName[ownerName] else nil
 	if owner == nil then
 		return findings -- 不属于任何组件的文件不在本门禁管辖内
 	end
+	local inHost = ownerSub == hostDirOf(manifest, owner.name)
 	local lines = stripComments(source)
 
 	local function report(kind: string, line: number, detail: string)
@@ -263,6 +283,27 @@ local function auditFile(manifest: ManifestT, path: string, source: string): { F
 		end
 	end
 
+	-- H3 / H4：targetSub 是被 require 的路径在目标组件下的第一级目录名。
+	local function judgeHost(line: number, targetName: string, targetSub: string?, how: string)
+		if byName[targetName] == nil or targetSub ~= hostDirOf(manifest, targetName) then
+			return
+		end
+		if hostRequirable(manifest, targetName) then
+			return
+		end
+		if targetName == owner.name then
+			if not inHost then
+				report(
+					"CORE_REQUIRES_HOST",
+					line,
+					`{owner.name} 的核心不得 require 自己的 {targetSub}/，宿主实现由调用方传入：{how}`
+				)
+			end
+		else
+			report("HOST_CROSS", line, `{owner.name} 不得 require {targetName} 的 {targetSub}/：{how}`)
+		end
+	end
+
 	for _, req in findRequires(lines) do
 		for _, name in manifest.forbidden do
 			if string.find(req.text, name, 1, true) ~= nil then
@@ -277,7 +318,7 @@ local function auditFile(manifest: ManifestT, path: string, source: string): { F
 		local res = resolveRequire(path, req.text)
 		if res.kind == "resolved" then
 			local targetPath = res.path :: string
-			local targetName = ownerOf(manifest, targetPath)
+			local targetName, _, targetSub = ownerOf(manifest, targetPath)
 			if targetName == nil then
 				report(
 					"OUTSIDE",
@@ -286,6 +327,7 @@ local function auditFile(manifest: ManifestT, path: string, source: string): { F
 				)
 			else
 				judge(req.line, targetName, `require({trim(req.text)})`)
+				judgeHost(req.line, targetName, targetSub, `require({trim(req.text)})`)
 			end
 		elseif res.kind == "literal" then
 			report(
@@ -301,6 +343,12 @@ local function auditFile(manifest: ManifestT, path: string, source: string): { F
 				if string.find(req.text, "%f[%w_]" .. component.name .. "%f[^%w_]") ~= nil then
 					matched = true
 					judge(req.line, component.name, `require({trim(req.text)})`)
+					-- 绝对路径解析不出目录，只能按 `<组件>.<宿主目录>` 的字面判定
+					local hostDir = hostDirOf(manifest, component.name)
+					local hostPattern = "%f[%w_]" .. component.name .. "%." .. hostDir .. "%f[^%w_]"
+					if string.find(req.text, hostPattern) ~= nil then
+						judgeHost(req.line, component.name, hostDir, `require({trim(req.text)})`)
+					end
 				end
 			end
 			for _, name in manifest.project do
@@ -322,11 +370,18 @@ local function auditFile(manifest: ManifestT, path: string, source: string): { F
 		end
 	end
 
-	if owner.layer == 0 then
+	-- H1：引擎字面只许出现在宿主目录里。每行只报一次（报第一个命中的字面）。
+	if not inHost then
+		local hostDir = hostDirOf(manifest, owner.name)
 		for lineNo, line in lines do
 			for _, literal in manifest.engineLiterals do
 				if string.find(line, literal, 1, true) ~= nil then
-					report("ENGINE_IN_L0", lineNo, `L0 组件 {owner.name} 出现引擎字面 '{literal}'`)
+					report(
+						"ENGINE_OUTSIDE_HOST",
+						lineNo,
+						`{owner.name} 在 {hostDir}/ 之外出现引擎字面 '{literal}'`
+					)
+					break
 				end
 			end
 		end
@@ -501,13 +556,16 @@ local function selftest(): boolean
 		project = { "Configs", "Debug.luau" },
 		forbidden = { "Scribe", "QuickZone" },
 		engineLiterals = Manifest.engineLiterals,
+		hostDir = "Host",
+		hostDirs = {},
+		hostRequirable = {},
 		budget = Manifest.budget,
 		releaseFloor = Manifest.releaseFloor,
 	}
 
-	local function kinds(path: string, source: string): string
+	local function kinds(path: string, source: string, manifest: any?): string
 		local seen: { string } = {}
-		for _, finding in auditFile(synthetic, path, source) do
+		for _, finding in auditFile(manifest or synthetic, path, source) do
 			table.insert(seen, finding.kind)
 		end
 		table.sort(seen)
@@ -580,13 +638,73 @@ local function selftest(): boolean
 	)
 	expect(kinds("src/RS/Mid/A.luau", 'local x = require("./y")') == "UNTRACEABLE", "路径式 require")
 	expect(kinds("src/RS/Mid/A.luau", "local x = require(someTable[key])") == "UNTRACEABLE", "动态 require")
+	-- 宿主目录（H1 / H3 / H4）
+	local ENGINE_LINE = 'local s = game:GetService("RunService")'
 	expect(
-		kinds("src/RS/Low/A.luau", 'local s = game:GetService("RunService")') == "ENGINE_IN_L0,ENGINE_IN_L0",
-		"L0 触碰引擎（game: 与 GetService( 各报一次）"
+		kinds("src/RS/Low/A.luau", ENGINE_LINE) == "ENGINE_OUTSIDE_HOST",
+		"H1：L0 核心触碰引擎（每行只报一次）"
+	)
+	expect(kinds("src/RS/Mid/A.luau", ENGINE_LINE) == "ENGINE_OUTSIDE_HOST", "H1：L1 核心触碰引擎")
+	expect(
+		kinds("src/RS/Mid/Integration/P.luau", ENGINE_LINE) == "ENGINE_OUTSIDE_HOST",
+		"H1：Integration/ 也不行"
+	)
+	expect(kinds("src/RS/Mid/Host/Impl.luau", ENGINE_LINE) == "", "H1：宿主目录里可以触碰引擎")
+	expect(kinds("src/RS/Low/Host/Impl.luau", ENGINE_LINE) == "", "H1：L0 的宿主目录同样可以")
+	expect(kinds("src/RS/Mid/A.luau", "-- " .. ENGINE_LINE) == "", "H1：注释行不算")
+	expect(
+		kinds("src/RS/Mid/A.luau", "local h = require(script.Parent.Host.Impl)") == "CORE_REQUIRES_HOST",
+		"H3：核心 require 自己的宿主目录"
 	)
 	expect(
-		kinds("src/RS/Mid/A.luau", 'local s = game:GetService("RunService")') == "",
-		"L1 以上不受 L0 规则约束"
+		kinds("src/RS/Mid/Host/Impl.luau", "local c = require(script.Parent.Parent.Core)") == "",
+		"H3：宿主目录 require 本组件的核心合法"
+	)
+	expect(
+		kinds("src/RS/Mid/Host/Impl.luau", "local c = require(script.Parent.Other)") == "",
+		"H3：宿主目录内部互相 require 合法"
+	)
+	expect(
+		kinds("src/RS/Mid/Host/Impl.luau", "local x = require(script.Parent.Parent.Parent.Low.Host.Impl)")
+			== "HOST_CROSS",
+		"H4：宿主目录 require 别的组件的宿主目录"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local x = require(script.Parent.Parent.Low.Host.Impl)") == "HOST_CROSS",
+		"H4：核心 require 别的组件的宿主目录"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local x = require(ReplicatedStorage.Low.Host.Impl)") == "HOST_CROSS",
+		"H4：绝对路径写法"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local x = require(script.Parent.Parent.Low.Hostile)") == "",
+		"H4：名字只是以 Host 开头的普通模块不算"
+	)
+
+	-- 宿主目录改名与「宿主目录即公开端口层」的组件（真实清单里的 Deuterium / Runtime）
+	local renamed: any = table.clone(synthetic)
+	renamed.hostDirs = { Low = "Runtime" }
+	renamed.hostRequirable = { "Low" }
+	expect(
+		kinds("src/RS/Low/Runtime/Impl.luau", ENGINE_LINE, renamed) == "",
+		"改名后的宿主目录可以触碰引擎"
+	)
+	expect(
+		kinds("src/RS/Low/Host/Impl.luau", ENGINE_LINE, renamed) == "ENGINE_OUTSIDE_HOST",
+		"改名后默认名字不再是宿主目录"
+	)
+	expect(
+		kinds("src/RS/Low/A.luau", "local r = require(script.Parent.Runtime.Port)", renamed) == "",
+		"hostRequirable：核心可以 require 自己的宿主目录"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local r = require(script.Parent.Parent.Low.Runtime.Port)", renamed) == "",
+		"hostRequirable：别的组件可以 require 它的宿主目录"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local r = require(script.Parent.Parent.Low.Runtime.Port)") == "",
+		"未改名时 Runtime 只是普通目录"
 	)
 
 	-- 清单自洽性
@@ -630,9 +748,7 @@ local function selftest(): boolean
 	expect(r.kind == "resolved" and r.path == "src/RS/Low/Api", "3 个 Parent 向上 2 层")
 
 	if #failures == 0 then
-		print(
-			`[selftest] 通过：{cases} 例（正控 5 · 违规类别 13 · 清单自洽 6 · 路径语义 1）`
-		)
+		print(`[selftest] 通过：{cases} 例`)
 		return true
 	end
 	for _, failure in failures do

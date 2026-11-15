@@ -27,3 +27,10 @@
 1 OUTSIDE src/ReplicatedStorage/Deuterium/Testing/SelfTest.luau
 1 OUTSIDE src/ReplicatedStorage/Deuterium/Testing/TestRunner.luau
 1 UNTRACEABLE src/ReplicatedStorage/Deuterium/Runtime/Platform/PhysicsProxy.luau
+#
+# 2026-11-14，P1.W3（`Host/` 门禁落地时的既有出入）：
+#   ENGINE_OUTSIDE_HOST  Deuterium 在 `Runtime/` 之外直接触碰引擎的 5 行 → Phase 6 的「引擎服务封装」Wave 清零
+1 ENGINE_OUTSIDE_HOST src/ReplicatedStorage/Deuterium/Core/Lifecycle/HotReload.luau
+1 ENGINE_OUTSIDE_HOST src/ReplicatedStorage/Deuterium/Net/Bridge/LocalBridge.luau
+1 ENGINE_OUTSIDE_HOST src/ReplicatedStorage/Deuterium/Net/Bridge/MockBridge.luau
+2 ENGINE_OUTSIDE_HOST src/ReplicatedStorage/Deuterium/Net/Core/NetworkManager.luau
