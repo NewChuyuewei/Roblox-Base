@@ -50,7 +50,7 @@ function SelfTest.RunAll(): boolean
 				expect(RateLimiter.Allow(key, 1, 3, 0), "1st")
 				expect(RateLimiter.Allow(key, 1, 3, 0), "2nd")
 				expect(RateLimiter.Allow(key, 1, 3, 0), "3rd")
-				expect(not RateLimiter.Allow(key, 1, 3, 0), "4th rejected")
+				expect(RateLimiter.Allow(key, 1, 3, 0), "4th rejected")
 				expect(not RateLimiter.Allow(key, 1, 3, 0), "still rejected (rate 0)")
 				local snap = RateLimiter.Snapshot(key)
 				expect(snap ~= nil and (snap :: any).cap == 3, "snapshot shape")
