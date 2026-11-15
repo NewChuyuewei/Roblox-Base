@@ -5,7 +5,8 @@
 --   scripts/carbon-deps-check.luau   依赖方向门禁（层次、deps、ports）
 --   scripts/loc-budget.luau          LOC 记分板（门禁 8）
 --
--- 命名：Carbon 的组件一律以元素周期表的元素命名（CARBON.md §2）。
+-- 命名：Carbon 的组件以元素周期表的元素命名（CARBON.md §2）。
+-- 例外：Deuterium 与 TritiumSQL 是氢的同位素，按用户决定保留原名。
 --
 -- 字段：
 --   name   元素名，同时是目录名

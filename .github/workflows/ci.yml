@@ -4,8 +4,10 @@
 # 工具链由仓库根的 rokit.toml 固定：rojo · lune · stylua · luau-lsp。
 name: CI
 
+# 工作分支经 pull_request 触发；push 只管长期分支，避免同一个提交跑两遍。
 on:
   push:
+    branches: [main, "feat/**", "release/**"]
   pull_request:
 
 permissions:
@@ -35,19 +37,51 @@ jobs:
 
       - name: Install toolchain (rokit)
         env:
+          # 首轮运行里 5 个 job 有 2 个在这一步下载失败（原因未确认，疑为匿名限流或网络抖动）。
+          # 对策：带上令牌，并对下载重试三次。
+          GITHUB_PAT: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ ! -x "$HOME/.rokit/bin/rokit" ]; then
+          retry() {
+            local n
+            for n in 1 2 3; do
+              if "$@"; then return 0; fi
+              echo "attempt $n failed: $*" >&2
+              sleep $((n * 10))
+            done
+            return 1
+          }
+          install_rokit() {
             curl -fsSL https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
+          }
+          if [ ! -x "$HOME/.rokit/bin/rokit" ]; then
+            retry install_rokit
           fi
           echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
-          "$HOME/.rokit/bin/rokit" install --no-trust-check
+          retry "$HOME/.rokit/bin/rokit" install --no-trust-check
 
       - name: Run gate
         env:
           # release/* 分支上 LOC 记分板从「只报告」变为「阻断」（门禁 8）
           CARBON_RELEASE: ${{ startsWith(github.ref_name, 'release/') && '1' || '0' }}
-        run: bash scripts/ci.sh ${{ matrix.stage }}
+        run: |
+          set -o pipefail
+          bash scripts/ci.sh ${{ matrix.stage }} 2>&1 | tee ci.log
+
+      # 失败时把关键行贴成注解与 job 摘要：不用下载日志就能看到是哪一条挂了。
+      - name: Summarize failure
+        if: failure()
+        run: |
+          [ -f ci.log ] || exit 0
+          {
+            grep -nE 'FAIL|失败|违规|rror' ci.log \
+              | grep -vE 'intentional|isolated|failed provider|违规 0|失败 0|FAIL 0' | tail -25 || true
+            echo '--- tail ---'
+            tail -15 ci.log
+          } > summary.txt
+          msg=$(head -c 6000 summary.txt | sed 's/%/%25/g; s/\r//g' | sed ':a;N;$!ba;s/\n/%0A/g')
+          echo "::error title=ci.sh ${{ matrix.stage }} failed::$msg"
+          { echo '```'; cat summary.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload place file
         if: matrix.stage == 'build'
