@@ -1,9 +1,10 @@
 --!strict
 -- LOC 记分板 —— 门禁 8（.plan/CARBON.md §5）。
 --
--- 把 320,000 行的预算与实际行数逐区域对照。记分板**只防缩水、不奖励超额**：
--- 日常分支只报告（退出码 0）；加 `--release` 时，合计未达标或任一区域低于自身预算的
--- 70% 才阻断。
+-- 把核心代码 300,000 行的预算与实际行数逐区域对照；测试、集成层、工具**另算**：
+-- 有各自的预算，但不进核心合计。记分板**只防缩水、不奖励超额**：
+-- 日常分支只报告（退出码 0）；加 `--release` 时，核心合计未达标或任一区域低于自身
+-- 预算的 70% 才阻断。
 --
 -- 口径（沿用 .plan/SCALE.md §2）：数物理行；只数 .luau；不含文档；不含 example/。
 --
@@ -137,23 +138,23 @@ local function hostShare(shape: Shape): number
 end
 
 -- 预算行：每个组件的核心、每层的测试、集成层、端到端、工具。
-local function budgetRows(manifest: typeof(Manifest)): ({ Row }, number)
+local function budgetRows(manifest: typeof(Manifest)): ({ Row }, number, number)
 	local rows: { Row } = {}
-	local sum = 0
+	local coreSum, extraSum = 0, 0
 	for _, component in manifest.components do
 		table.insert(rows, { area = `core:{component.name}`, actual = 0, budget = component.core })
-		sum += component.core
+		coreSum += component.core
 	end
 	for layer = 0, 3 do
 		local budget = manifest.budget.testsByLayer[layer]
 		table.insert(rows, { area = `tests:L{layer}`, actual = 0, budget = budget })
-		sum += budget
+		extraSum += budget
 	end
 	table.insert(rows, { area = "integration", actual = 0, budget = manifest.budget.integration })
 	table.insert(rows, { area = "e2e", actual = 0, budget = manifest.budget.endToEnd })
 	table.insert(rows, { area = "tools", actual = 0, budget = manifest.budget.tools })
-	sum += manifest.budget.integration + manifest.budget.endToEnd + manifest.budget.tools
-	return rows, sum
+	extraSum += manifest.budget.integration + manifest.budget.endToEnd + manifest.budget.tools
+	return rows, coreSum, extraSum
 end
 
 -- 把 { 路径 → 行数 } 累加进预算行；返回 行表, 合计, 不计入的项目条目行数。
@@ -189,11 +190,23 @@ local function tally(manifest: typeof(Manifest), lineCounts: { [string]: number 
 	return rows, total, project
 end
 
--- release 判定：合计达到 total，且每个区域达到自身预算的 floor。返回不达标的原因。
-local function releaseProblems(manifest: typeof(Manifest), rows: { Row }, total: number): { string }
+-- 核心合计：只累计 core:<组件> 行的 actual（另算区域不进合计）。
+local function coreTotalOf(rows: { Row }): number
+	local sum = 0
+	for _, row in rows do
+		if string.sub(row.area, 1, 5) == "core:" then
+			sum += row.actual
+		end
+	end
+	return sum
+end
+
+-- release 判定：核心合计达到 total，且每个区域达到自身预算的 floor。返回不达标的原因。
+local function releaseProblems(manifest: typeof(Manifest), rows: { Row }): { string }
 	local problems: { string } = {}
-	if total < manifest.budget.total then
-		table.insert(problems, `合计 {total} < {manifest.budget.total}`)
+	local coreTotal = coreTotalOf(rows)
+	if coreTotal < manifest.budget.total then
+		table.insert(problems, `核心合计 {coreTotal} < {manifest.budget.total}`)
 	end
 	for _, row in rows do
 		if row.actual < row.budget * manifest.releaseFloor then
@@ -231,7 +244,7 @@ local function report(release: boolean): number
 	walk("tests", counts)
 	walk("scripts", counts)
 
-	local rows, total, project = tally(Manifest, counts)
+	local rows, _, project = tally(Manifest, counts)
 
 	print(string.format("%-18s %9s %9s %7s  %s", "AREA", "ACTUAL", "BUDGET", "RATIO", "ROLE"))
 	local roleOf: { [string]: string } = {}
@@ -252,13 +265,29 @@ local function report(release: boolean): number
 		)
 	end
 	print(string.rep("-", 46))
+	local coreTotal, extraActual, extraBudget = coreTotalOf(rows), 0, 0
+	for _, row in rows do
+		if string.sub(row.area, 1, 5) ~= "core:" then
+			extraActual += row.actual
+			extraBudget += row.budget
+		end
+	end
 	print(
 		string.format(
 			"%-18s %9d %9d %7s",
-			"TOTAL",
-			total,
+			"TOTAL core",
+			coreTotal,
 			Manifest.budget.total,
-			percent(total, Manifest.budget.total)
+			percent(coreTotal, Manifest.budget.total)
+		)
+	)
+	print(
+		string.format(
+			"%-18s %9d %9d %7s",
+			"EXTRA",
+			extraActual,
+			extraBudget,
+			percent(extraActual, extraBudget)
 		)
 	)
 	print("")
@@ -295,7 +324,7 @@ local function report(release: boolean): number
 		)
 	end
 
-	local problems = releaseProblems(Manifest, rows, total)
+	local problems = releaseProblems(Manifest, rows)
 	if release then
 		if #problems > 0 then
 			print("")
@@ -357,11 +386,11 @@ local function selftest(): boolean
 	expect(kindOf("src/ReplicatedStorage/Platinum/README.md") == "ignore", "文档不计")
 	expect(kindOf("example/src/ReplicatedStorage/Scribe/init.luau") == "ignore", "example/ 不计")
 
-	-- 预算自洽：各行之和必须等于清单声明的总数（防止改一处漏一处）
-	local _, sum = budgetRows(Manifest)
+	-- 预算自洽：核心预算之和必须等于 total（另算区域不进这个和；防止改一处漏一处）
+	local _, coreSum = budgetRows(Manifest)
 	expect(
-		sum == Manifest.budget.total,
-		`预算各行之和 {sum} 必须等于 total {Manifest.budget.total}`
+		coreSum == Manifest.budget.total,
+		`核心预算之和 {coreSum} 必须等于 total {Manifest.budget.total}`
 	)
 
 	-- 累加
@@ -384,21 +413,24 @@ local function selftest(): boolean
 	expect(got["integration"] == 7 and got["e2e"] == 3 and got["tools"] == 2, "其余三桶")
 	expect(total == 157 and project == 21, "合计不含项目条目与文档")
 
-	-- release 判定必须会失败，也必须会通过
-	expect(#releaseProblems(Manifest, rows, total) > 0, "远低于预算时必须不达标")
-	local full, fullTotal = budgetRows(Manifest)
+	-- release 判定必须会失败，也必须会通过（合计只算核心）
+	expect(#releaseProblems(Manifest, rows) > 0, "远低于预算时必须不达标")
+	local full = budgetRows(Manifest)
 	for _, row in full do
 		row.actual = row.budget
 	end
-	expect(#releaseProblems(Manifest, full, fullTotal) == 0, "恰好达到预算时达标")
+	expect(#releaseProblems(Manifest, full) == 0, "核心恰好达到预算时达标")
 	for _, row in full do
 		row.actual = math.ceil(row.budget * Manifest.releaseFloor)
 	end
-	local atFloor = releaseProblems(Manifest, full, fullTotal)
-	expect(#atFloor == 0, "每区域恰在 70% 线上、合计达标时达标")
-	full[1].actual = math.floor(full[1].budget * Manifest.releaseFloor) - 1
-	expect(#releaseProblems(Manifest, full, fullTotal) == 1, "单个区域跌破 70% 即不达标")
-	expect(#releaseProblems(Manifest, full, fullTotal - 1) == 2, "合计差 1 行也不达标")
+	expect(#releaseProblems(Manifest, full) == 1, "各区域停在 70% 线上时核心合计不足")
+	full[1].actual += Manifest.budget.total - coreTotalOf(full)
+	expect(#releaseProblems(Manifest, full) == 0, "补足核心合计即达标，其余可停在 70%")
+	full[1].actual -= 1
+	expect(#releaseProblems(Manifest, full) == 1, "核心合计差 1 行也不达标")
+	full[1].actual += 1
+	full[24].actual = math.floor(full[24].budget * Manifest.releaseFloor) - 1
+	expect(#releaseProblems(Manifest, full) == 1, "核心达标而某区域跌破 70% 即不达标")
 
 	-- 组件形状
 	local function shapeKind(path: string): string
@@ -461,7 +493,7 @@ local function selftest(): boolean
 
 	if #failures == 0 then
 		print(
-			`[selftest] 通过：{cases} 例（行数 5 · 归类 12 · 预算自洽 1 · 累加 4 · release 判定 5 · 形状 22）`
+			`[selftest] 通过：{cases} 例（行数 5 · 归类 12 · 预算自洽 1 · 累加 4 · release 判定 6 · 形状 22）`
 		)
 		return true
 	end

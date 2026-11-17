@@ -30,10 +30,10 @@ export type Component = {
 
 local components: { Component } = {
 	-- L0 纯库：零依赖，且不得触碰引擎
-	{ name = "Platinum", role = "Math", layer = 0, deps = {}, ports = {}, core = 9000 },
-	{ name = "Tin", role = "Schema", layer = 0, deps = {}, ports = { "Krypton" }, core = 6500 },
-	{ name = "Krypton", role = "Crypto", layer = 0, deps = {}, ports = {}, core = 5500 },
-	{ name = "Neon", role = "Console", layer = 0, deps = {}, ports = {}, core = 3500 },
+	{ name = "Platinum", role = "Math", layer = 0, deps = {}, ports = {}, core = 13000 },
+	{ name = "Tin", role = "Schema", layer = 0, deps = {}, ports = { "Krypton" }, core = 9500 },
+	{ name = "Krypton", role = "Crypto", layer = 0, deps = {}, ports = {}, core = 8000 },
+	{ name = "Neon", role = "Console", layer = 0, deps = {}, ports = {}, core = 5000 },
 
 	-- L1 运行时底座
 	{
@@ -42,12 +42,12 @@ local components: { Component } = {
 		layer = 1,
 		deps = { "Neon", "Tin", "Krypton" },
 		ports = {},
-		core = 31000,
+		core = 45000,
 	},
-	{ name = "Vanadium", role = "VM", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 12000 },
-	{ name = "Helium", role = "ECS", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6500 },
-	{ name = "Phosphorus", role = "Telemetry", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6500 },
-	{ name = "Uranium", role = "Jobs", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 4500 },
+	{ name = "Vanadium", role = "VM", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 18000 },
+	{ name = "Helium", role = "ECS", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 9500 },
+	{ name = "Phosphorus", role = "Telemetry", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 9500 },
+	{ name = "Uranium", role = "Jobs", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6500 },
 
 	-- L2 领域引擎
 	{
@@ -56,7 +56,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Deuterium", "Tin", "Krypton" },
 		ports = {},
-		core = 29500,
+		core = 43000,
 	},
 	{
 		name = "Titanium",
@@ -64,7 +64,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium" },
 		ports = { "Helium" },
-		core = 22000,
+		core = 32000,
 	},
 	{
 		name = "Silicon",
@@ -72,7 +72,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium" },
 		ports = { "Titanium", "Bismuth" },
-		core = 12000,
+		core = 17500,
 	},
 	{
 		name = "Bismuth",
@@ -80,10 +80,10 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium", "Tin", "Krypton" },
 		ports = {},
-		core = 10000,
+		core = 14500,
 	},
-	{ name = "Gallium", role = "Anim", layer = 2, deps = { "Platinum" }, ports = { "Helium" }, core = 7500 },
-	{ name = "Mercury", role = "KV", layer = 2, deps = { "Deuterium", "Tin" }, ports = {}, core = 6500 },
+	{ name = "Gallium", role = "Anim", layer = 2, deps = { "Platinum" }, ports = { "Helium" }, core = 11000 },
+	{ name = "Mercury", role = "KV", layer = 2, deps = { "Deuterium", "Tin" }, ports = {}, core = 9500 },
 
 	-- L3 分布式与对抗
 	{
@@ -92,7 +92,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Deuterium", "Tin", "Helium", "Titanium" },
 		ports = {},
-		core = 14500,
+		core = 21000,
 	},
 	{
 		name = "Copper",
@@ -100,7 +100,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Deuterium", "Mercury", "Tin" },
 		ports = {},
-		core = 9000,
+		core = 13000,
 	},
 	{
 		name = "Boron",
@@ -108,7 +108,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Titanium", "Phosphorus" },
 		ports = { "Cesium" },
-		core = 5500,
+		core = 8000,
 	},
 	{
 		name = "Sodium",
@@ -116,7 +116,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Mercury", "Tin" },
 		ports = { "Copper" },
-		core = 4500,
+		core = 6500,
 	},
 }
 
@@ -145,9 +145,10 @@ return {
 	-- 宿主目录之外不得出现的引擎字面（注释行除外）。所有层的组件都适用。
 	engineLiterals = { "game:", "game.", "GetService(", "workspace", "Instance.new(", "task." },
 
-	-- 预算（行）。合计必须等于 total —— loc-budget 的自检会核对。
+	-- 预算（行）。total 只算核心：19 个组件 core 之和必须等于 total。
+	-- 测试、集成层、端到端、工具**另算**——有各自预算，不进合计。自检会核对。
 	budget = {
-		total = 320000,
+		total = 300000,
 		-- 各层的测试预算：组件内的 SelfTest.luau + tests/<组件>/
 		testsByLayer = { [0] = 10000, [1] = 25000, [2] = 36000, [3] = 14000 },
 		integration = 9000, -- 所有 `<组件>/Integration/`
@@ -155,6 +156,6 @@ return {
 		tools = 12000, -- scripts/ 与示例、基准
 	},
 
-	-- release 分支的阻断线：合计达到 total，且每个区域达到自身预算的这个比例。
+	-- release 分支的阻断线：核心合计达到 total，且每个区域达到自身预算的这个比例。
 	releaseFloor = 0.7,
 }
