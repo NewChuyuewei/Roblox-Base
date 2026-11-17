@@ -30,10 +30,10 @@ export type Component = {
 
 local components: { Component } = {
 	-- L0 纯库：零依赖，且不得触碰引擎
-	{ name = "Platinum", role = "Math", layer = 0, deps = {}, ports = {}, core = 8000 },
-	{ name = "Tin", role = "Schema", layer = 0, deps = {}, ports = { "Krypton" }, core = 6000 },
-	{ name = "Krypton", role = "Crypto", layer = 0, deps = {}, ports = {}, core = 5000 },
-	{ name = "Neon", role = "Console", layer = 0, deps = {}, ports = {}, core = 3000 },
+	{ name = "Platinum", role = "Math", layer = 0, deps = {}, ports = {}, core = 9000 },
+	{ name = "Tin", role = "Schema", layer = 0, deps = {}, ports = { "Krypton" }, core = 6500 },
+	{ name = "Krypton", role = "Crypto", layer = 0, deps = {}, ports = {}, core = 5500 },
+	{ name = "Neon", role = "Console", layer = 0, deps = {}, ports = {}, core = 3500 },
 
 	-- L1 运行时底座
 	{
@@ -42,12 +42,12 @@ local components: { Component } = {
 		layer = 1,
 		deps = { "Neon", "Tin", "Krypton" },
 		ports = {},
-		core = 28000,
+		core = 31000,
 	},
-	{ name = "Vanadium", role = "VM", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 11000 },
-	{ name = "Helium", role = "ECS", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6000 },
-	{ name = "Phosphorus", role = "Telemetry", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6000 },
-	{ name = "Uranium", role = "Jobs", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 4000 },
+	{ name = "Vanadium", role = "VM", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 12000 },
+	{ name = "Helium", role = "ECS", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6500 },
+	{ name = "Phosphorus", role = "Telemetry", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 6500 },
+	{ name = "Uranium", role = "Jobs", layer = 1, deps = { "Neon", "Tin" }, ports = {}, core = 4500 },
 
 	-- L2 领域引擎
 	{
@@ -56,7 +56,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Deuterium", "Tin", "Krypton" },
 		ports = {},
-		core = 26000,
+		core = 29500,
 	},
 	{
 		name = "Titanium",
@@ -64,7 +64,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium" },
 		ports = { "Helium" },
-		core = 20000,
+		core = 22000,
 	},
 	{
 		name = "Silicon",
@@ -72,7 +72,7 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium" },
 		ports = { "Titanium", "Bismuth" },
-		core = 11000,
+		core = 12000,
 	},
 	{
 		name = "Bismuth",
@@ -80,10 +80,10 @@ local components: { Component } = {
 		layer = 2,
 		deps = { "Platinum", "Uranium", "Tin", "Krypton" },
 		ports = {},
-		core = 9000,
+		core = 10000,
 	},
-	{ name = "Gallium", role = "Anim", layer = 2, deps = { "Platinum" }, ports = { "Helium" }, core = 7000 },
-	{ name = "Mercury", role = "KV", layer = 2, deps = { "Deuterium", "Tin" }, ports = {}, core = 6000 },
+	{ name = "Gallium", role = "Anim", layer = 2, deps = { "Platinum" }, ports = { "Helium" }, core = 7500 },
+	{ name = "Mercury", role = "KV", layer = 2, deps = { "Deuterium", "Tin" }, ports = {}, core = 6500 },
 
 	-- L3 分布式与对抗
 	{
@@ -92,7 +92,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Deuterium", "Tin", "Helium", "Titanium" },
 		ports = {},
-		core = 13000,
+		core = 14500,
 	},
 	{
 		name = "Copper",
@@ -100,7 +100,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Deuterium", "Mercury", "Tin" },
 		ports = {},
-		core = 8000,
+		core = 9000,
 	},
 	{
 		name = "Boron",
@@ -108,7 +108,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Titanium", "Phosphorus" },
 		ports = { "Cesium" },
-		core = 5000,
+		core = 5500,
 	},
 	{
 		name = "Sodium",
@@ -116,7 +116,7 @@ local components: { Component } = {
 		layer = 3,
 		deps = { "Mercury", "Tin" },
 		ports = { "Copper" },
-		core = 4000,
+		core = 4500,
 	},
 }
 
@@ -147,7 +147,7 @@ return {
 
 	-- 预算（行）。合计必须等于 total —— loc-budget 的自检会核对。
 	budget = {
-		total = 300000,
+		total = 320000,
 		-- 各层的测试预算：组件内的 SelfTest.luau + tests/<组件>/
 		testsByLayer = { [0] = 10000, [1] = 25000, [2] = 36000, [3] = 14000 },
 		integration = 9000, -- 所有 `<组件>/Integration/`
