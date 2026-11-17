@@ -55,7 +55,7 @@ Carbon 新增的两道门禁（2026-11-14）：
 ```bash
 "$LUNE" run scripts/carbon-deps-check.luau                 # 依赖方向（CARBON.md §3）
 "$LUNE" run scripts/carbon-deps-check.luau --selftest
-"$LUNE" run scripts/loc-budget.luau                        # 门禁 8：LOC 记分板（日常只报告）；第二张表按 PURE/HOST/INTEGRATION/TEST 分列
+"$LUNE" run scripts/loc-budget.luau                        # 门禁 8：LOC 记分板（日常只报告；TOTAL 行=核心合计 vs 300k，测试/集成/工具另算进 EXTRA 行）；第二张表按 PURE/HOST/INTEGRATION/TEST 分列
 "$LUNE" run scripts/loc-budget.luau --release              # release 分支：不达标则 exit 1
 "$LUNE" run scripts/loc-budget.luau --selftest
 ```
