@@ -33,6 +33,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local Manifest = require("./carbon-manifest")
+local hostDirOf = Manifest.hostDirOf
 
 type Row = { area: string, actual: number, budget: number }
 type Shape = { name: string, pure: number, host: number, integration: number, test: number }
@@ -50,14 +51,24 @@ end
 
 -- 仓库相对路径 → 归到哪个桶。返回 桶种类, 组件名?
 --   "core" | "test" | "integration" | "e2e" | "tools" | "project" | "ignore"
+local knownCache: { [typeof(Manifest)]: { [string]: boolean } } = {}
+local function knownSet(manifest: typeof(Manifest)): { [string]: boolean }
+	local known = knownCache[manifest]
+	if known == nil then
+		known = {}
+		for _, component in manifest.components do
+			known[component.name] = true
+		end
+		knownCache[manifest] = known
+	end
+	return known
+end
+
 local function classify(manifest: typeof(Manifest), path: string): (string, string?)
 	if string.sub(path, -5) ~= ".luau" then
 		return "ignore", nil
 	end
-	local known: { [string]: boolean } = {}
-	for _, component in manifest.components do
-		known[component.name] = true
-	end
+	local known = knownSet(manifest)
 
 	local rootPrefix = manifest.root .. "/"
 	if string.sub(path, 1, #rootPrefix) == rootPrefix then
@@ -85,13 +96,6 @@ local function classify(manifest: typeof(Manifest), path: string): (string, stri
 		return "tools", nil
 	end
 	return "ignore", nil
-end
-
--- 组件的宿主目录名：默认取 hostDir，个别组件在 hostDirs 里改名。
-local function hostDirOf(manifest: typeof(Manifest), componentName: string): string
-	local m: any = manifest
-	local override = if m.hostDirs ~= nil then m.hostDirs[componentName] else nil
-	return override or m.hostDir or "Host"
 end
 
 -- 仓库相对路径 → 在组件标准形状里属于哪一列。返回 列, 组件名?

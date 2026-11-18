@@ -17,7 +17,8 @@
 --   core   核心行数预算（行，不含 Integration/ 与 SelfTest）
 --
 -- 改这里 = 改架构。先改 .plan/CARBON.md 并登记决策，再改本文件（两处必须一致）。
--- 纯数据模块：不得 require 任何东西（两个脚本都靠这一点直接装载它）。
+-- 纯数据模块：不得 require 任何东西（两个脚本都靠这一点直接装载它）；
+-- 唯一允许的函数是无副作用的 hostDirOf —— 宿主目录名规则只在这里写一份，两道门禁共用。
 
 export type Component = {
 	name: string, -- 元素名 = 目录名 = 命名空间
@@ -120,6 +121,13 @@ local components: { Component } = {
 	},
 }
 
+-- 组件的宿主目录名（规则 H1 的单一来源）：默认 `hostDir`，可被 `hostDirs[组件名]` 覆盖。
+-- 纯函数；carbon-deps-check 与 loc-budget 共用，避免「同一规则、两份实现」漂移。
+local function hostDirOf(anyManifest: any, componentName: string): string
+	local override = if anyManifest.hostDirs ~= nil then anyManifest.hostDirs[componentName] else nil
+	return override or anyManifest.hostDir or "Host"
+end
+
 return {
 	-- 组件所在目录：`<root>/<name>/`
 	root = "src/ReplicatedStorage",
@@ -134,6 +142,9 @@ return {
 	forbidden = { "Scribe", "QuickZone" },
 
 	-- 宿主目录（CARBON.md §3.2，规则 H1–H4）：每个组件唯一可以出现引擎 API 的地方。
+	hostDirOf = hostDirOf,
+
+	-- 默认宿主目录名（hostDirs 未覆盖时用它）：
 	hostDir = "Host",
 	-- 按组件改名。Deuterium 的宿主目录是既有的 `Runtime/`（不改名）。
 	hostDirs = { Deuterium = "Runtime" } :: { [string]: string },
