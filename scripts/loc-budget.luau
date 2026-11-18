@@ -418,6 +418,19 @@ local function selftest(): boolean
 	expect(total == 157 and project == 21, "合计不含项目条目与文档")
 
 	-- release 判定必须会失败，也必须会通过（合计只算核心）
+	--
+	-- 取行一律按 `area` 查，不按下标：记分板早先是 19 核心 + 4 测试层 + 3 另算区域，
+	-- `full[24]` 恰好是 integration；日后增删任何一行，按下标的断言就会指向别的区域，
+	-- 而断言照样「通过」—— 自检失去效力却无人知晓。
+	local function rowOf(list: { Row }, area: string): Row
+		for _, row in list do
+			if row.area == area then
+				return row
+			end
+		end
+		error(`自检取不到区域 {area} 的行：记分板的行序变了，按 area 取行仍应命中`)
+	end
+
 	expect(#releaseProblems(Manifest, rows) > 0, "远低于预算时必须不达标")
 	local full = budgetRows(Manifest)
 	for _, row in full do
@@ -428,12 +441,14 @@ local function selftest(): boolean
 		row.actual = math.ceil(row.budget * Manifest.releaseFloor)
 	end
 	expect(#releaseProblems(Manifest, full) == 1, "各区域停在 70% 线上时核心合计不足")
-	full[1].actual += Manifest.budget.total - coreTotalOf(full)
+	local firstCore = rowOf(full, `core:{Manifest.components[1].name}`)
+	firstCore.actual += Manifest.budget.total - coreTotalOf(full)
 	expect(#releaseProblems(Manifest, full) == 0, "补足核心合计即达标，其余可停在 70%")
-	full[1].actual -= 1
+	firstCore.actual -= 1
 	expect(#releaseProblems(Manifest, full) == 1, "核心合计差 1 行也不达标")
-	full[1].actual += 1
-	full[24].actual = math.floor(full[24].budget * Manifest.releaseFloor) - 1
+	firstCore.actual += 1
+	local integrationRow = rowOf(full, "integration")
+	integrationRow.actual = math.floor(integrationRow.budget * Manifest.releaseFloor) - 1
 	expect(#releaseProblems(Manifest, full) == 1, "核心达标而某区域跌破 70% 即不达标")
 
 	-- 组件形状
