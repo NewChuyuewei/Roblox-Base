@@ -258,7 +258,9 @@ local function auditManifest(manifest: ManifestT): { Finding }
 	-- 宿主目录字段自身的合法性：写错一个名字，H1/H3/H4 会整族规则静默失效
 	local m: any = manifest
 	local function badHostDir(dir: any): boolean
-		return type(dir) ~= "string" or dir == "" or dir == "Integration"
+		return type(dir) ~= "string"
+			or dir == ""
+			or dir == "Integration"
 			or string.find(dir, "/", 1, true) ~= nil
 	end
 	if m.hostDir ~= nil and badHostDir(m.hostDir) then
@@ -791,23 +793,22 @@ local function selftest(): boolean
 		"未改名时 Runtime 只是普通目录"
 	)
 
-		-- 块注释与括号配对（注释里的引擎字面/require 不得误报，收尾之后的代码不得漏检）
+	-- 块注释与括号配对（注释里的引擎字面/require 不得误报，收尾之后的代码不得漏检）
 	expect(
 		kinds(
 			"src/RS/Mid/A.luau",
-			"--[[ doc\nlocal s = game:GetService(\"X\")\nrequire(script.Parent.Parent.High.Api)\n]]"
+			'--[[ doc\nlocal s = game:GetService("X")\nrequire(script.Parent.Parent.High.Api)\n]]'
 		) == "",
 		"块注释整段不算"
 	)
 	expect(
-		kinds("src/RS/Mid/A.luau", "--[[ 块内 ]] local x = require(script.Parent.Parent.High.Api)") == "UPWARD",
+		kinds("src/RS/Mid/A.luau", "--[[ 块内 ]] local x = require(script.Parent.Parent.High.Api)")
+			== "UPWARD",
 		"同行收尾后仍扫描"
 	)
 	expect(
-		kinds(
-			"src/RS/Mid/A.luau",
-			"--[=[ 等号块 ]=] local x = require(script.Parent.Parent.High.Api)"
-		) == "UPWARD",
+		kinds("src/RS/Mid/A.luau", "--[=[ 等号块 ]=] local x = require(script.Parent.Parent.High.Api)")
+			== "UPWARD",
 		"=[=] 形式收尾后仍扫描"
 	)
 	local reqs = findRequires(stripComments("local x = require(a(script.Parent.Parent.High.Api))"))
