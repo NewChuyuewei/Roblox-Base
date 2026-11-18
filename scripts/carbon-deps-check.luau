@@ -811,8 +811,14 @@ local function selftest(): boolean
 		"=[=] 形式收尾后仍扫描"
 	)
 	local reqs = findRequires(stripComments("local x = require(a(script.Parent.Parent.High.Api))"))
-	expect(#reqs == 1 and reqs[1].text == "a(script.Parent.Parent.High.Api)", "require 参数按括号配对提取")
-	expect(kinds("src/RS/Mid/A.luau", "local x = require(a(script.Parent.Parent.High.Api))") == "UPWARD", "嵌套调用里的违规照样抓到")
+	expect(
+		#reqs == 1 and reqs[1].text == "a(script.Parent.Parent.High.Api)",
+		"require 参数按括号配对提取"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local x = require(a(script.Parent.Parent.High.Api))") == "UPWARD",
+		"嵌套调用里的违规照样抓到"
+	)
 
 	-- 清单自洽性
 	local function manifestKinds(mutate: (any) -> ()): number
