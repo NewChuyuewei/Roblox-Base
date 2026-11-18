@@ -16,6 +16,7 @@ local Loader = require("../scripts/lune-loader")
 -- 桩只注入到“被装载模块”的环境，测试脚本自身没有 Roblox 全局 -> 需要实例的用例直接 require 桩
 local RbxStub = require("../scripts/rbx-stub")
 local process = require("@lune/process")
+local fs = require("@lune/fs")
 
 local RS = "src/ReplicatedStorage"
 
@@ -419,18 +420,23 @@ local SUITES = {
 }
 
 -- 需要 game、只能在 Studio 跑的 SelfTest（此处只登记，不跑）
-local ENGINE_BOUND = {
-	"src/ReplicatedStorage/Deuterium/Core/Container/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Core/Lifecycle/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Core/Reflection/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Net/Core/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Net/Processing/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Net/Security/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Runtime/Environment/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Runtime/Interop/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Runtime/Platform/SelfTest.luau",
-	"src/ReplicatedStorage/Deuterium/Testing/SelfTest.luau",
-}
+-- 引擎线要跑的 SelfTest 清单**由 loader 挂载树派生**，不再手抄路径。
+--
+-- 为什么：手抄清单在新增一个 Studio-only 的 SelfTest 时不会给出任何提示，它就会
+-- 静默地不进引擎线（`.plan/README.md` R23 记的正是这种「门禁找不到目标却仍然通过」
+-- 的假绿形状）。判据取模块自己的声明：源码里出现 `IsStudio` 的，说明它跑不了
+-- headless、属于引擎线；`Diagnostics/Logging/SelfTest.luau` 刻意保持 headless
+-- （它由 SUITES 的 kind="selftest" 执行），因此不含该标记 —— 派生规则与
+-- 原先手抄的 10 条完全一致，且今后自动跟随新增。
+local ENGINE_BOUND: { string } = {}
+for _, path in Loader.listModules() do
+	if string.find(path, "/SelfTest%.luau$", 1, false) ~= nil then
+		local ok, text = pcall(fs.readFile, path)
+		if ok and type(text) == "string" and string.find(text :: string, "IsStudio", 1, true) ~= nil then
+			table.insert(ENGINE_BOUND, path :: string)
+		end
+	end
+end
 
 local function relPath(p)
 	-- 注意：Luau 没有 string.replace（第一次写这里时踩了，sweep 一打印失败清单就崩）
@@ -513,6 +519,13 @@ for _, suite in SUITES do
 		Loader.reset()
 		local ran, okCount = 0, 0
 		local problems = {}
+		if #ENGINE_BOUND == 0 then
+			-- 派生为空只可能是挂载树/判据坏了：宁可是个刺眼的失败，不能是「0 条也全过」
+			table.insert(
+				problems,
+				{ "(derived)", "派生结果为空 —— 引擎线不得在零个 SelfTest 下通过" }
+			)
+		end
 		for _, path in ENGINE_BOUND do
 			local okLoad, mod = pcall(Loader.load, path, { engineStub = true, studio = true })
 			if not okLoad or mod == nil or type(mod.RunAll) ~= "function" then

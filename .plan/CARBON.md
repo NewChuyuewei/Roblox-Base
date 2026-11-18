@@ -416,7 +416,7 @@ L0 纯库（零依赖） Platinum 数学 · Tin 序列化 · Krypton 压缩与�
 | 命令 | 结果 |
 | --- | --- |
 | `stylua --check src scripts` | exit 0（91 个文件，0 个需格式化） |
-| `bash scripts/p0-check.sh` | exit 0（`table.insert(` 26 / 基线 26） |
+| `bash scripts/p0-check.sh` | exit 0（`table.insert(` 24 · `game:GetService(` 0 · `loadstring(` 0 · 覆盖 44 文件，均与基线一致） |
 | `lune run scripts/cert-scope-check.luau` · `--selftest` | exit 0 · 门禁 10 OK，违规 0 · 自检 9 例 |
 | `lune run scripts/carbon-deps-check.luau` · `--selftest` | exit 0 · 新增违规 0，登记在册的既有违规 20 · 自检 25 例 |
 | `lune run scripts/loc-budget.luau` · `--selftest` | exit 0 · 合计 12,208 / 300,000（4.1%）· 自检 27 例 |

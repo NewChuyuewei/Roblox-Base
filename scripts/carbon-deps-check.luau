@@ -34,6 +34,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local Manifest = require("./carbon-manifest")
+local hostDirOf = Manifest.hostDirOf
 
 type Component = Manifest.Component
 type ManifestT = typeof(Manifest)
@@ -82,11 +83,44 @@ local function contains(list: { string }, item: string): boolean
 	return table.find(list, item) ~= nil
 end
 
--- 只剥「行首即注释」的行：行尾注释仍参与扫描，不会因剥离而隐藏真违规。
+-- 剥注释：行首 `--` 的整行，以及 `--[[ … ]]`（含 --[=[ … ]=]）块注释的整个区间。
+-- 块注释必须处理：长注释里出现 require(...) 或引擎字面时，逐行扫描会误报——
+-- 门禁不该逼人改写注释来绕开它。行尾注释仍参与扫描，不会因剥离而隐藏真违规。
+-- 简化处：只识别「行首即注释」的块注释开头；串字面量里的 --[[ 不处理（病理用法）。
 local function stripComments(source: string): { string }
 	local out: { string } = {}
-	for _, line in split(source, "\n") do
-		table.insert(out, if string.sub(trim(line), 1, 2) == "--" then "" else line)
+	local openEq: number? = nil -- 处于块注释内时 = 开始标记的 '=' 数
+	for _, raw in split(source, "\n") do
+		local line = raw
+		if openEq ~= nil then
+			local close = string.find(line, "]" .. string.rep("=", openEq) .. "]", 1, true)
+			if close == nil then
+				table.insert(out, "")
+				continue
+			end
+			line = string.sub(line, close + 2 + openEq)
+			openEq = nil
+		end
+		local trimmed = trim(line)
+		if string.sub(trimmed, 1, 2) == "--" and string.sub(trimmed, 3, 3) == "[" then
+			local eq = 0
+			local i = 4
+			while string.sub(trimmed, i, i) == "=" do
+				eq += 1
+				i += 1
+			end
+			if string.sub(trimmed, i, i) == "[" then
+				local close = string.find(trimmed, "]" .. string.rep("=", eq) .. "]", i + 1, true)
+				if close == nil then
+					openEq = eq
+					table.insert(out, "")
+					continue
+				end
+				table.insert(out, string.sub(trimmed, close + 2 + eq))
+				continue
+			end
+		end
+		table.insert(out, if string.sub(trimmed, 1, 2) == "--" then "" else line)
 	end
 	return out
 end
@@ -100,10 +134,21 @@ local function findRequires(lines: { string }): { { line: number, text: string }
 			if at == nil then
 				break
 			end
-			local close = string.find(line, ")", at, true)
-			local text = if close == nil
-				then string.sub(line, at + 8)
-				else string.sub(line, at + 8, close - 1)
+			-- 括号配对到与之平衡的那个 ')'：require(a(b)) 的实参不能被第一个 ')' 截断
+			local depth = 1
+			local i = at + 8
+			while i <= #line and depth > 0 do
+				local ch = string.sub(line, i, i)
+				if ch == "(" then
+					depth += 1
+				elseif ch == ")" then
+					depth -= 1
+				end
+				if depth > 0 then
+					i += 1
+				end
+			end
+			local text = if depth == 0 then string.sub(line, at + 8, i - 1) else string.sub(line, at + 8)
 			table.insert(out, { line = index, text = text })
 			start = at + 8
 		end
@@ -152,11 +197,18 @@ local function resolveRequire(fromFile: string, arg: string): Resolution
 end
 
 -- ---------- 清单索引与自洽性 ----------
+local indexCache: { [any]: { [string]: Component } } = {}
 local function index(manifest: ManifestT): { [string]: Component }
+	-- auditFile 对每个文件都调一次：按清单缓存，别每文件重建
+	local cached = indexCache[manifest]
+	if cached ~= nil then
+		return cached
+	end
 	local byName: { [string]: Component } = {}
 	for _, component in manifest.components do
 		byName[component.name] = component
 	end
+	indexCache[manifest] = byName
 	return byName
 end
 
@@ -202,6 +254,47 @@ local function auditManifest(manifest: ManifestT): { Finding }
 			end
 		end
 	end
+
+	-- 宿主目录字段自身的合法性：写错一个名字，H1/H3/H4 会整族规则静默失效
+	local m: any = manifest
+	local function badHostDir(dir: any): boolean
+		return type(dir) ~= "string"
+			or dir == ""
+			or dir == "Integration"
+			or string.find(dir, "/", 1, true) ~= nil
+	end
+	if m.hostDir ~= nil and badHostDir(m.hostDir) then
+		table.insert(findings, {
+			kind = "MANIFEST",
+			where = "hostDir",
+			detail = "宿主目录名不合法（空 / 叫 Integration / 含斜杠）",
+		})
+	end
+	for compName, dir in m.hostDirs or {} do
+		if byName[compName] == nil then
+			table.insert(findings, {
+				kind = "MANIFEST",
+				where = `hostDirs.{compName}`,
+				detail = "覆盖指向不存在的组件",
+			})
+		end
+		if badHostDir(dir) then
+			table.insert(findings, {
+				kind = "MANIFEST",
+				where = `hostDirs.{compName}`,
+				detail = "宿主目录名不合法（空 / 叫 Integration / 含斜杠）",
+			})
+		end
+	end
+	for _, compName in m.hostRequirable or {} do
+		if byName[compName] == nil then
+			table.insert(findings, {
+				kind = "MANIFEST",
+				where = "hostRequirable",
+				detail = `不是清单里的组件：{compName}`,
+			})
+		end
+	end
 	return findings
 end
 
@@ -213,13 +306,6 @@ local function ownerOf(manifest: ManifestT, path: string): (string?, boolean, st
 	end
 	local parts = split(string.sub(path, #prefix + 1), "/")
 	return parts[1], parts[2] == "Integration", parts[2]
-end
-
--- 组件的宿主目录名：默认 `hostDir`，可被 `hostDirs[组件名]` 覆盖。
-local function hostDirOf(manifest: ManifestT, componentName: string): string
-	local m: any = manifest
-	local override = if m.hostDirs ~= nil then m.hostDirs[componentName] else nil
-	return override or m.hostDir or "Host"
 end
 
 local function hostRequirable(manifest: ManifestT, componentName: string): boolean
@@ -707,6 +793,34 @@ local function selftest(): boolean
 		"未改名时 Runtime 只是普通目录"
 	)
 
+	-- 块注释与括号配对（注释里的引擎字面/require 不得误报，收尾之后的代码不得漏检）
+	expect(
+		kinds(
+			"src/RS/Mid/A.luau",
+			'--[[ doc\nlocal s = game:GetService("X")\nrequire(script.Parent.Parent.High.Api)\n]]'
+		) == "",
+		"块注释整段不算"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "--[[ 块内 ]] local x = require(script.Parent.Parent.High.Api)")
+			== "UPWARD",
+		"同行收尾后仍扫描"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "--[=[ 等号块 ]=] local x = require(script.Parent.Parent.High.Api)")
+			== "UPWARD",
+		"=[=] 形式收尾后仍扫描"
+	)
+	local reqs = findRequires(stripComments("local x = require(a(script.Parent.Parent.High.Api))"))
+	expect(
+		#reqs == 1 and reqs[1].text == "a(script.Parent.Parent.High.Api)",
+		"require 参数按括号配对提取"
+	)
+	expect(
+		kinds("src/RS/Mid/A.luau", "local x = require(a(script.Parent.Parent.High.Api))") == "UPWARD",
+		"嵌套调用里的违规照样抓到"
+	)
+
 	-- 清单自洽性
 	local function manifestKinds(mutate: (any) -> ()): number
 		local copy: any = {
@@ -741,6 +855,15 @@ local function selftest(): boolean
 	expect(manifestKinds(function(m)
 		table.insert(m.components[1].deps, "Nope")
 	end) == 1, "deps 指向不存在的组件")
+	expect(manifestKinds(function(m)
+		m.hostDir = "Integration"
+	end) == 1, "hostDir 不得叫 Integration")
+	expect(manifestKinds(function(m)
+		m.hostDirs = { Nope = "Host" }
+	end) == 1, "hostDirs 指向不存在的组件")
+	expect(manifestKinds(function(m)
+		m.hostRequirable = { "Nope" }
+	end) == 1, "hostRequirable 指向不存在的组件")
 	expect(#auditManifest(Manifest) == 0, "真实清单自洽")
 
 	-- 路径语义（与门禁 10 相同）

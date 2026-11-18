@@ -33,6 +33,7 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 
 local Manifest = require("./carbon-manifest")
+local hostDirOf = Manifest.hostDirOf
 
 type Row = { area: string, actual: number, budget: number }
 type Shape = { name: string, pure: number, host: number, integration: number, test: number }
@@ -50,14 +51,24 @@ end
 
 -- 仓库相对路径 → 归到哪个桶。返回 桶种类, 组件名?
 --   "core" | "test" | "integration" | "e2e" | "tools" | "project" | "ignore"
+local knownCache: { [typeof(Manifest)]: { [string]: boolean } } = {}
+local function knownSet(manifest: typeof(Manifest)): { [string]: boolean }
+	local known = knownCache[manifest]
+	if known == nil then
+		known = {}
+		for _, component in manifest.components do
+			known[component.name] = true
+		end
+		knownCache[manifest] = known
+	end
+	return known
+end
+
 local function classify(manifest: typeof(Manifest), path: string): (string, string?)
 	if string.sub(path, -5) ~= ".luau" then
 		return "ignore", nil
 	end
-	local known: { [string]: boolean } = {}
-	for _, component in manifest.components do
-		known[component.name] = true
-	end
+	local known = knownSet(manifest)
 
 	local rootPrefix = manifest.root .. "/"
 	if string.sub(path, 1, #rootPrefix) == rootPrefix then
@@ -85,13 +96,6 @@ local function classify(manifest: typeof(Manifest), path: string): (string, stri
 		return "tools", nil
 	end
 	return "ignore", nil
-end
-
--- 组件的宿主目录名：默认取 hostDir，个别组件在 hostDirs 里改名。
-local function hostDirOf(manifest: typeof(Manifest), componentName: string): string
-	local m: any = manifest
-	local override = if m.hostDirs ~= nil then m.hostDirs[componentName] else nil
-	return override or m.hostDir or "Host"
 end
 
 -- 仓库相对路径 → 在组件标准形状里属于哪一列。返回 列, 组件名?
@@ -414,6 +418,19 @@ local function selftest(): boolean
 	expect(total == 157 and project == 21, "合计不含项目条目与文档")
 
 	-- release 判定必须会失败，也必须会通过（合计只算核心）
+	--
+	-- 取行一律按 `area` 查，不按下标：记分板早先是 19 核心 + 4 测试层 + 3 另算区域，
+	-- `full[24]` 恰好是 integration；日后增删任何一行，按下标的断言就会指向别的区域，
+	-- 而断言照样「通过」—— 自检失去效力却无人知晓。
+	local function rowOf(list: { Row }, area: string): Row
+		for _, row in list do
+			if row.area == area then
+				return row
+			end
+		end
+		error(`自检取不到区域 {area} 的行：记分板的行序变了，按 area 取行仍应命中`)
+	end
+
 	expect(#releaseProblems(Manifest, rows) > 0, "远低于预算时必须不达标")
 	local full = budgetRows(Manifest)
 	for _, row in full do
@@ -424,12 +441,14 @@ local function selftest(): boolean
 		row.actual = math.ceil(row.budget * Manifest.releaseFloor)
 	end
 	expect(#releaseProblems(Manifest, full) == 1, "各区域停在 70% 线上时核心合计不足")
-	full[1].actual += Manifest.budget.total - coreTotalOf(full)
+	local firstCore = rowOf(full, `core:{Manifest.components[1].name}`)
+	firstCore.actual += Manifest.budget.total - coreTotalOf(full)
 	expect(#releaseProblems(Manifest, full) == 0, "补足核心合计即达标，其余可停在 70%")
-	full[1].actual -= 1
+	firstCore.actual -= 1
 	expect(#releaseProblems(Manifest, full) == 1, "核心合计差 1 行也不达标")
-	full[1].actual += 1
-	full[24].actual = math.floor(full[24].budget * Manifest.releaseFloor) - 1
+	firstCore.actual += 1
+	local integrationRow = rowOf(full, "integration")
+	integrationRow.actual = math.floor(integrationRow.budget * Manifest.releaseFloor) - 1
 	expect(#releaseProblems(Manifest, full) == 1, "核心达标而某区域跌破 70% 即不达标")
 
 	-- 组件形状
@@ -509,6 +528,11 @@ for _, arg in process.args do
 		process.exit(if selftest() then 0 else 1)
 	elseif arg == "--release" then
 		release = true
+	else
+		-- 未识别的参数必须是错误，不能被忽略：打错一个字母的 `--release` 会退化成
+		-- 「只报告」模式，门禁 8 就此静默失效，而 CI 仍然全绿。
+		print(`未知参数：{arg}（可用：--selftest · --release）`)
+		process.exit(2)
 	end
 end
 
