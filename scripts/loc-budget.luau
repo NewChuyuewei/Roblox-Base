@@ -513,6 +513,11 @@ for _, arg in process.args do
 		process.exit(if selftest() then 0 else 1)
 	elseif arg == "--release" then
 		release = true
+	else
+		-- 未识别的参数必须是错误，不能被忽略：打错一个字母的 `--release` 会退化成
+		-- 「只报告」模式，门禁 8 就此静默失效，而 CI 仍然全绿。
+		print(`未知参数：{arg}（可用：--selftest · --release）`)
+		process.exit(2)
 	end
 end
 

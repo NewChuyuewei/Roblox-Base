@@ -336,6 +336,10 @@ for _, arg in args do
 		quiet = true
 	elseif arg == "--selftest" then
 		wantSelftest = true
+	else
+		-- 同 loc-budget：忽略未知参数会让打错的开关静默变成默认行为（假绿）。
+		print(`未知参数：{arg}（可用：--quiet · --selftest）`)
+		process.exit(2)
 	end
 end
 
