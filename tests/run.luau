@@ -28,7 +28,7 @@ local SUITES = {
 		name = "Neon.Core",
 		kind = "selftest",
 		dir = RS .. "/Neon",
-		order = { "Level", "Record", "Publish", "Sink", "RingSink", "Channel", "Format", "Filter", "Neon", "SelfTest" },
+		order = { "Level", "Record", "Publish", "Sink", "RingSink", "Channel", "Format", "Filter", "Command", "Neon", "SelfTest" },
 	},
 	{
 		name = "Dr.Diagnostics.Logging",
