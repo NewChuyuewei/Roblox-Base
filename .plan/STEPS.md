@@ -635,3 +635,17 @@ stylua --config-path stylua.toml --check Deuterium TritiumSQL \
 - `Neon` 零依赖、L0 不碰引擎：`grep -rn "game:\|game\.\|GetService(\|workspace\|Instance.new(\|task\." src/ReplicatedStorage/Neon/*.luau`（剔注释后）为空。
 - 门禁反馈实录（同一个 Wave 内跑了 4 轮 CI 才绿，记下来免得后人当成环境噪声）：`math.type` 在这个 Luau 构建里不存在（类型与运行期同时报）；`pcall` 保护一个不返回值的函数时，类型系统只给一个 boolean，接不住 `err`；可变表字段上的字符串字面量被放大成 `string`，于是 `Record.New(Level.Info, …)` 反而过不了 strict —— 改成「运行时 `Level.Rank` 校验 + 记录字段仍标 `Level.Level`」；`Dropped` 早先算成 `written - count`，把 `Reset()` 清掉的条数记成了丢失，被自己的自检当场抓住。
 - 待办：`P2.W3` 格式化 · `P2.W4` 过滤与限速 · `P2.W5` 命令 · `P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 20 → ≤3）。
+
+
+---
+
+## 2026-11-21 · P2.W3（`Neon` 格式化）+ 打印热路径收敛
+
+- 新增 `src/ReplicatedStorage/Neon/Format.luau`（实测 **396** 行，预算 0.7k）：`Format.Line` / `Value` / `Time` / `SetLimits` / `Limits` / `Reset`。核心 8 模块合计 **1264** 行，`SelfTest.luau` **709** 行 **32** 例（新增 13 例）。
+- 钉住的语义：渲染只依赖记录本身（不读时钟、不印地址、按键排序）⇒ 同一记录两次渲染逐字节相同；循环判定只看当前递归路径（兄弟位置重复出现照常展开）；截断标 `(+N)` 且省略号计入上限；控制字符转 `\n\r\t`；时间戳走 UTC 且自己做算术；四项上限非法值抛错、先全校验后赋值、`Limits()` 返回冻结快照、`Reset()` 给夹具复位。
+- 两处优化（各有用例）：`Sink.Broadcast` 零输出端返回共享的冻结 `EMPTY_RESULT`、`errors` 惰性分配（happy path 零分配）；「可打印标识符」的判定统一成 `Record.IsOneLine`（`Record.New` / `Channel.New` / `Sink` 的 name 三处原本是三份各写一个 `[\r\n]` 模式，现在两条定长 `find` 短路，且它在每条记录上都要跑）。
+- **CI 打回 3 轮的根因实录**（本地无 Lune，`types`/`test` 只能靠 CI，所以每条都得有明确的复现方式才敢改）：
+  1. `test` 6 例红。三处是**代码**错：字符串渲染少一个收尾引号（`${...}` 手改时丢了 `"`）；折叠摘要写 `<table:{#value}>`，而 `{a=1,b=2}` 的 `#` 是 0 ⇒ 摘要说「下面有 0 个」正是它唯一要说的事说反了，改成数键、数到 64 就报 `64+`；`Format.Line` 漏了频道（文件头的示例格式里有，实现里没有 —— 文档与实现各写一次必然漂移，这里以文档为准补实现）。
+  2. 一处是**测试**错：给冻结表赋值断言错误文本含 `frozen`，而措辞归运行时（Lune 与 Studio 不同）。规则：只断言「抛了错」，不断言运行时的报错句式。
+  3. `types` 红两连：`local errors: { string }? = nil` 靠 `~= nil` 判别，赋值后类型不收窄，`table.insert` 报 `Expected {string} but {string}?` ⇒ 非空类型 + 独立 `ownErrors` 旗标；`os.date("!%H:%M:%S", …)` 在本仓 vendor 定义里只声明 `"*t"`/`"!*t"` ⇒ 弃用 `os.date`，时间戳取模算时分秒（顺带省掉每条日志一次宿主调用，`P1` 复审时 `StructuredLog` 也撞过同一条，见上文门禁反馈表第 2 行）。
+- 待办：`P2.W4` 过滤与限速 · `P2.W5` 命令 · `P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 20 → ≤3）。
