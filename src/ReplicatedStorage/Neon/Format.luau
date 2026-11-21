@@ -319,19 +319,24 @@ end
 --[=[
 	时间戳 → `HH:MM:SS`（UTC）。
 
-	两个刻意的选择：用 UTC 而不是本地时区 —— 同一条记录在两台机器上必须印出同一段文本，
-	否则任何跨机器的回归比对都是假红；坏时间戳不抛错 —— 丢日志比丢时间格式严重得多，
-	这里降级成 `<time?>`，其余字段照打。`os.date` 对越界值返回 nil，所以包一层 pcall。
+	两个刻意的选择：
+
+	* **用 UTC，且自己做算术。** 同一条记录在两台机器上必须印出同一段文本，否则任何跨机器
+	  的回归比对都是假红。而 `os.date` 在这个构建的类型定义里只声明了 `"*t"` / `"!*t"` 两种
+	  形式，传 `"%H:%M:%S"` 直接是 TypeError（types 门禁实测）——就算绕过类型，它也要过一层
+	  宿主实现，而打印是全工程最高频的入口。Unix 秒本身与时区无关，时分秒除 3600、取余就
+	  出来了：确定性更严、成本更低，两头都赚。
+	* **坏时间戳不抛错。** 丢日志比丢时间格式严重得多，这里降级成 `<time?>`，其余字段照打。
+	  Lua 的 `%` 是 floor 语义，1970 之前的负数也稳稳落在 0..86399。
 ]=]
 function Format.Time(time: number): string
 	if type(time) ~= "number" or time ~= time or time == math.huge or time == -math.huge then
 		return "<time?>"
 	end
-	local ok, text = pcall(os.date, "!%H:%M:%S", math.floor(time))
-	if not ok or type(text) ~= "string" then
-		return "<time?>"
-	end
-	return text
+	local secondsOfDay = math.floor(time) % 86400
+	local hour = math.floor(secondsOfDay / 3600)
+	local minute = math.floor(secondsOfDay / 60) % 60
+	return string.format("%02d:%02d:%02d", hour, minute, secondsOfDay % 60)
 end
 
 --[=[
