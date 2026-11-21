@@ -30,10 +30,15 @@ local registry: { Sink } = {}
 local deliveredTotal = 0
 local failedTotal = 0
 
+-- 冻结的「什么都没有」：可以被多个调用方同时持有，改动它会当场抛错，
+-- 而不是把一份结果改坏之后影响下一个读到它的人。
+local EMPTY_ERRORS: { string } = table.freeze({}) :: { string }
+local EMPTY_RESULT = table.freeze({ delivered = 0, failed = 0, errors = EMPTY_ERRORS })
+
 --[=[	构造一个输出端。`name` 参与重复注册检查与错误信息，所以不许为空、不许带换行。]=]
 function Sink.New(name: string, write: (Record.Record) -> ()): Sink
 	assert(
-		type(name) == "string" and #name > 0 and string.find(name, "[\r\n]", 1, false) == nil,
+		Record.IsOneLine(name),
 		`[Neon.Sink] name 必须是不含换行的非空字符串，收到 {Level.Describe(name)}`
 	)
 	assert(
@@ -122,12 +127,19 @@ end
 	或者更糟 —— 把整条记录丢掉。所以抛错的 sink 只损失它自己那一份。
 ]=]
 function Sink.Broadcast(record: Record.Record): { delivered: number, failed: number, errors: { string } }
+	local count = #registry
+	if count == 0 then
+		-- 「一个输出端都没注册」是启动早期与测试里的常态（W1 的判据正是它）。这里返回共享的
+		-- 冻结空结果，而不是每条日志新建两个表 —— 打印入口是全工程最高频的调用点，
+		-- 每次打印都分配一个结果表等于让所有组件替它付钱。
+		return EMPTY_RESULT
+	end
 	local delivered = 0
 	local failed = 0
-	local errors: { string } = {}
+	-- errors 只在真的出错时才分配：happy path 上一个表都不用。
+	local errors: { string }? = nil
 	-- 先取长度再逐个索引：广播途中有新注册的不参与本轮（否则「谁会被叫到」
 	-- 取决于 sink 内部有没有副作用，这种不确定性在测试里根本复现不出来）。
-	local count = #registry
 	for index = 1, count do
 		local sink = registry[index]
 		if sink ~= nil then
@@ -142,13 +154,18 @@ function Sink.Broadcast(record: Record.Record): { delivered: number, failed: num
 				delivered += 1
 			else
 				failed += 1
-				table.insert(errors, `{sink.name}: {tostring(err)}`)
+				local bucket = errors
+				if bucket == nil then
+					bucket = {}
+					errors = bucket
+				end
+				table.insert(bucket, `{sink.name}: {tostring(err)}`)
 			end
 		end
 	end
 	deliveredTotal += delivered
 	failedTotal += failed
-	return { delivered = delivered, failed = failed, errors = errors }
+	return { delivered = delivered, failed = failed, errors = errors or EMPTY_ERRORS }
 end
 
 --[=[

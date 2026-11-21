@@ -11,6 +11,7 @@ local Level = require(script.Parent.Level)
 local Record = require(script.Parent.Record)
 local Sink = require(script.Parent.Sink)
 local RingSink = require(script.Parent.RingSink)
+local Format = require(script.Parent.Format)
 local Neon = require(script.Parent.Neon)
 
 local SelfTest = {}
@@ -40,6 +41,37 @@ local function expectFails(run: () -> (), what: string, needle: string?): ()
 			`{what}：错误信息里没有 {needle}，实际是 {string.sub(text, 1, 120)}`
 		)
 	end
+end
+
+-- 只看字节结构的 UTF-8 完整性检查。本模块与 `Format` 都不依赖 `utf8.*`（vendor 的窄类型
+-- 定义里不一定声明了它），而「截断没切半个字符」这件事必须能被断言，否则等于没测。
+local function utf8Complete(text: string): boolean
+	local index = 1
+	local length = #text
+	while index <= length do
+		local byte = string.byte(text, index) :: number
+		local width: number
+		if byte >= 0xF0 then
+			width = 4
+		elseif byte >= 0xE0 then
+			width = 3
+		elseif byte >= 0xC0 then
+			width = 2
+		else
+			width = 1
+		end
+		if index + width - 1 > length then
+			return false
+		end
+		for offset = 1, width - 1 do
+			local cont = string.byte(text, index + offset) :: number
+			if cont < 0x80 or cont >= 0xC0 then
+				return false
+			end
+		end
+		index += width
+	end
+	return true
 end
 
 -- 收集型输出端：断言「记录到了哪里、到了几个」全靠它。
@@ -448,6 +480,207 @@ local cases: { { name: string, run: () -> () } } = {
 			expect(sink.Got()[1].level == Level.Trace, "级别名与常量表是同一个值")
 		end,
 	},
+
+	-- ---------- P2.W3：格式化 ----------
+	{
+		name = "W3·同一条记录渲染两次完全相同，且与字段插入顺序无关",
+		run = function()
+			local first = Neon.Info("c", "m", { z = 1, a = 2 })
+			local second = Neon.Info("c", "m", { a = 2, z = 1 })
+			local textA = Format.Line(first)
+			expect(textA == Format.Line(first), "同一条记录两次渲染必须逐字节相同")
+			expect(
+				textA == Format.Line(second),
+				"渲染不该取决于表的插入顺序（next 不保证顺序）"
+			)
+			expect(string.find(textA, "a=2, z=1", 1, true) ~= nil, "键按字典序排列")
+			expect(
+				string.find(textA, "] INFO  c: m", 1, true) ~= nil,
+				"级别右对齐到 5 宽 + 频道 + 正文"
+			)
+		end,
+	},
+	{
+		name = "W3·控制字符折叠成可见转义（单行是硬要求）",
+		run = function()
+			local line = Format.Line(Neon.Info("c", "first\nsecond\tthird\rfourth"))
+			expect(string.find(line, "\n", 1, true) == nil, "渲染结果里不许出现裸换行")
+			expect(string.find(line, "\r", 1, true) == nil, "也不许出现裸回车")
+			expect(
+				string.find(line, "\\n", 1, true) ~= nil
+					and string.find(line, "\\t", 1, true) ~= nil
+					and string.find(line, "\\r", 1, true) ~= nil,
+				"三种控制字符都要转成可见形式"
+			)
+			-- 没有控制字符时不该被 gsub 动过（一次多余的字符串构造在每条日志上都要付）
+			local plain = Format.Line(Neon.Info("c", "no control chars here"))
+			expect(string.find(plain, "no control chars here", 1, true) ~= nil, "正文原样出现")
+		end,
+	},
+	{
+		name = "W3·截断标出被丢掉的字节数，省略号计入上限",
+		run = function()
+			Format.SetLimits({ maxMessageLength = 12 })
+			local line = Format.Line(Neon.Info("c", string.rep("x", 20)))
+			-- 12 的上限里省略号占 3 字节 → 正文 9 个 x，丢掉 11 个，并且把这个数说出来
+			expect(string.find(line, "xxxxxxxxx…(+11)", 1, true) ~= nil, `实际渲染：{line}`)
+			Format.SetLimits({ maxMessageLength = 2000 })
+			local short = Format.Line(Neon.Info("c", "short"))
+			expect(string.find(short, "(+", 1, true) == nil, "没截就不许标截断")
+		end,
+	},
+	{
+		name = "W3·截断必须落在 UTF-8 字符边界（中文日志不能变半个字）",
+		run = function()
+			local chinese = "中文中文中文中文中文"
+			for limit = 4, 14 do
+				Format.SetLimits({ maxValueLength = limit })
+				local text = Format.Value({ s = chinese })
+				expect(
+					utf8Complete(text),
+					`上限 {limit} 时截出了半个字符：{string.format("%q", text)}`
+				)
+			end
+		end,
+	},
+	{
+		name = "W3·自引用的表标 <cycle> 而不是死循环；兄弟重复不算循环",
+		run = function()
+			local loop = { name = "loop" }
+			loop.self = loop
+			local text = Format.Value(loop)
+			expect(string.find(text, "<cycle>", 1, true) ~= nil, `实际：{text}`)
+			expect(string.find(text, 'name="loop"', 1, true) ~= nil, "循环之外的键照常渲染")
+			local shared = { n = 1 }
+			local twin = Format.Value({ a = shared, b = shared })
+			expect(
+				string.find(twin, "<cycle>", 1, true) == nil,
+				"同一表出现在两个兄弟位置是常见形状，不该被当成循环"
+			)
+			expect(
+				string.find(twin, "a={n=1}", 1, true) ~= nil and string.find(twin, "b={n=1}", 1, true) ~= nil,
+				"两处都展开"
+			)
+		end,
+	},
+	{
+		name = "W3·超过深度上限就折叠，并带上元素数",
+		run = function()
+			local deep = { l1 = { l2 = { l3 = "x" } } }
+			local text = Format.Value(deep)
+			expect(
+				string.find(text, "<table:1>", 1, true) ~= nil,
+				`超深部分折叠成 <table:元素数>，实际：{text}`
+			)
+			expect(string.find(text, "l3", 1, true) == nil, "超深的键不再展开")
+		end,
+	},
+	{
+		name = "W3·函数与 userdata 只印类型，绝不带地址",
+		run = function()
+			local text = Format.Value(print)
+			expect(text == "<function>", `函数渲染成 <function>，实际：{text}`)
+			expect(
+				string.find(text, "0x", 1, true) == nil,
+				"地址每次运行都不同：带上它，「两次渲染相同」这条判据永远失败"
+			)
+			local mixed = Format.Value({ f = print, n = 1 })
+			expect(
+				string.find(mixed, "f=<function>", 1, true) ~= nil,
+				`表里的函数同样处理，实际：{mixed}`
+			)
+		end,
+	},
+	{
+		name = "W3·整行也有硬上限（64 个键拼起来足以挤爆控制台）",
+		run = function()
+			Format.SetLimits({ maxLineLength = 20 })
+			local fields: { [string]: any } = {}
+			for index = 1, 40 do
+				fields[`k{index}`] = index
+			end
+			local line = Format.Line(Neon.Info("c", "wide", fields))
+			expect(
+				string.sub(line, 18, 20) == "…",
+				`正文截到上限处，实际前 24 字节：{string.sub(line, 1, 24)}`
+			)
+			expect(
+				#line > 20 and string.find(line, "(+", 1, true) ~= nil,
+				"省略号之后的 (+N) 是附加说明，允许超出上限几个字节"
+			)
+			expect(Format.Limits().maxLineLength == 20, "上限读得回来")
+		end,
+	},
+	{
+		name = "W3·SetLimits 校验非法值，且失败时不留半套新配置",
+		run = function()
+			local before = Format.Limits()
+			expectFails(function()
+				Format.SetLimits({ maxDepth = 3.5 })
+			end, "小数上限必须抛错", "maxDepth")
+			expectFails(function()
+				Format.SetLimits({ maxValueLength = 3 })
+			end, "比省略号还短的上限必须抛错")
+			expectFails(function()
+				Format.SetLimits("nope" :: any)
+			end, "SetLimits 只收表")
+			-- 关键一例：前一项合法、后一项非法。逐项赋值的写法会在这里留下 maxDepth=1。
+			expectFails(function()
+				Format.SetLimits({ maxDepth = 1, maxValueLength = 0 })
+			end, "混合合法与非法时必须整体抛错")
+			local now = Format.Limits()
+			expect(
+				now.maxDepth == before.maxDepth
+					and now.maxValueLength == before.maxValueLength
+					and now.maxMessageLength == before.maxMessageLength
+					and now.maxLineLength == before.maxLineLength,
+				"抛错的调用一项都不许生效"
+			)
+		end,
+	},
+	{
+		name = "W3·Limits 快照是冻结的，改不动模块配置",
+		run = function()
+			local snapshot = Format.Limits()
+			expectFails(function()
+				(snapshot :: any).maxDepth = 99
+			end, "快照必须冻结：能被随手改的快照就是第二套配置")
+			expect(Format.Limits().maxDepth ~= 99, "模块配置不受影响")
+		end,
+	},
+	{
+		name = "W3·坏输入降级而不是抛错：缺 fields 的裸记录、非有限时间戳",
+		run = function()
+			local raw: any = { time = 0 / 0, level = "info", channel = "c", message = "m" }
+			local line = Format.Line(raw)
+			expect(string.find(line, "<time?>", 1, true) ~= nil, "时间戳坏了就标记它，正文照打")
+			expect(string.find(line, ": m", 1, true) ~= nil, "正文没丢")
+			expect(string.find(line, "{}", 1, true) == nil, "没有字段时不打空花括号")
+			expectFails(function()
+				Format.Line(nil :: any)
+			end, "传进来的根本不是记录时必须抛错", "Line")
+			expect(Format.Time(math.huge) == "<time?>", "±inf 同样降级")
+			expect(
+				Format.Time(86400) == "00:00:00",
+				"渲染走 UTC：同一条记录在两台机器上必须印出同一段文本"
+			)
+		end,
+	},
+	{
+		name = "W3·零输出端时广播返回共享的冻结空结果（热路径不分配）",
+		run = function()
+			local record = Neon.Info("c", "nobody listening")
+			local result = Sink.Broadcast(record)
+			expect(
+				result.delivered == 0 and result.failed == 0 and #result.errors == 0,
+				"空结果内容正确"
+			)
+			expect(result == Sink.Broadcast(record), "同一个共享表：省掉每条日志一次的分配")
+			expectFails(function()
+				(result :: any).delivered = 7
+			end, "共享结果必须冻结，否则一个调用方能改坏别人的读数", "frozen")
+		end,
+	},
 }
 
 --[=[ 跑全部用例，返回是否全过。CI 的 `test` 阶段按返回值定成败。]=]
@@ -455,6 +688,9 @@ function SelfTest.RunAll(): boolean
 	local failures = 0
 	for _, case in cases do
 		Neon.Reset()
+		-- 上限是模块级配置，用例改过就必须复位：否则「同一记录两次渲染相同」这类断言会读到
+		-- 上一个用例留下的截断位，症状是偶发失败、单跑又都对 —— 最难查的那一类。
+		Format.Reset()
 		local ok, err = protect(case.run)
 		if ok then
 			print(`  [Neon] PASS  {case.name}`)

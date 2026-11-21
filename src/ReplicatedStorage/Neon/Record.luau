@@ -92,6 +92,21 @@ local function copyFields(fields: any): Fields
 end
 
 --[=[
+	频道名 / 输出端名这类「会被印出来的标识符」是否安全：非空、且不含换行。
+
+	用两次 plain find 而不是一个 `"[\r\n]"` 模式：这个判定在**每条记录**上都要跑，
+	而模式匹配要走一遍 pattern VM，两条定长查找明显便宜。含换行为什么必须挡 ——
+	`Format.Line` 与宿主控制台都按行处理，一条记录裂成两行之后，按行 grep 的规则会漏掉
+	半条，而人看到的症状是「这条日志没打出来」。
+]=]
+function Record.IsOneLine(text: string): boolean
+	if type(text) ~= "string" or #text == 0 then
+		return false
+	end
+	return string.find(text, "\n", 1, true) == nil and string.find(text, "\r", 1, true) == nil
+end
+
+--[=[
 	构造一条记录。四个参数全部当场校验，不做「宽容接受 + 悄悄修正」：
 	日志系统是最后那道防线，它自己把输入猜错了就没人发现了。
 ]=]
@@ -105,9 +120,7 @@ function Record.New(level: any, channel: string, message: string, fields: Fields
 	-- 频道里带换行会撕开 W3 的单行格式，message 非字符串通常是把表塞错了位置。
 	Level.Rank(level)
 	assert(
-		type(channel) == "string"
-			and #channel > 0
-			and string.find(channel :: string, "[\r\n]", 1, false) == nil,
+		Record.IsOneLine(channel :: string),
 		`[Neon.Record] channel 必须是不含换行的非空字符串，收到 {Level.Describe(channel)}`
 	)
 	assert(

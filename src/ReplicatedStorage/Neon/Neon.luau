@@ -20,6 +20,7 @@ local Sink = require(script.Parent.Sink)
 local RingSink = require(script.Parent.RingSink)
 local Channel = require(script.Parent.Channel)
 local Publish = require(script.Parent.Publish)
+local Format = require(script.Parent.Format)
 
 local Neon = {}
 
@@ -27,6 +28,7 @@ Neon.Level = Level
 Neon.Record = Record
 Neon.Sink = Sink
 Neon.RingSink = RingSink
+Neon.Format = Format
 
 --[=[
 	打印入口。`level` 可以是级别名或可规范化的字符串（`"INFO"` 可用，`"notice"` 抛错）。
