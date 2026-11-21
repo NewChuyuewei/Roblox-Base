@@ -68,16 +68,16 @@ STYLUA="$HOME/.rokit/tool-storage/johnnymorganz/stylua/2.6.0/stylua.exe"
 LUNE="$HOME/.rokit/tool-storage/lune-org/lune/0.11.1/lune.exe"
 ROJO="$HOME/.rokit/tool-storage/rojo-rbx/rojo/7.7.1/rojo.exe"
 
-DS="src/ReplicatedStorage/Deuterium"; TS="src/ReplicatedStorage/TritiumSQL"
+DS="src/ReplicatedStorage/Deuterium"; TS="src/ReplicatedStorage/TritiumSQL"; NS="src/ReplicatedStorage/Neon"
 "$STYLUA" --config-path stylua.toml --check $DS $TS scripts ; echo "exit=$?"
-bash scripts/p0-check.sh                                   # P0 棘轮（26 / 47 / 0）
+bash scripts/p0-check.sh                                   # P0 棘轮（实测 files 44 · 24 / 0 / 0）
 "$LUNE" run scripts/cert-scope-check.luau --quiet           # 门禁 10
 "$LUNE" run scripts/cert-scope-check.luau --selftest        # 门禁 10 自检
 "$LUNE" run tests/run.luau                                  # 门禁 2（headless，含 SKIP 计数）
 "$LUNE" run scripts/probe-headless.luau                     # headless 能力基线
 # 门禁 3 的类型部分（需 vendor 的 Roblox 定义；不联网）
 "$ROJO" sourcemap default.project.json -o sourcemap.json
-LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc $DS $TS
+LUAU_LSP analyze --sourcemap=sourcemap.json --definitions:@roblox=types/globalTypes.None.d.luau --base-luaurc=.luaurc $DS $TS $NS
 "$ROJO" build -o /tmp/place.rbxlx                           # 结构冒烟
 ```
 

@@ -22,6 +22,15 @@ local RS = "src/ReplicatedStorage"
 
 local SUITES = {
 	{
+		-- Neon 是 L0 纯库、零依赖，所以排在最前：它坏了要在别人之前先响。
+		-- 走 selftest 而不是 checks —— 断言住在组件自己的 SelfTest.luau 里，
+		-- 同一个函数在 Studio 里也叫得到（AGENTS.md 硬规则 4）。
+		name = "Neon.Core",
+		kind = "selftest",
+		dir = RS .. "/Neon",
+		order = { "Level", "Record", "Publish", "Sink", "RingSink", "Channel", "Neon", "SelfTest" },
+	},
+	{
 		name = "Dr.Diagnostics.Logging",
 		kind = "selftest",
 		dir = RS .. "/Deuterium/Diagnostics/Logging",
