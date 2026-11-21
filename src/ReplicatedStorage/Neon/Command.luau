@@ -16,6 +16,9 @@
 --      而没人会去怀疑注册。与 `Sink.Add` 的重复注册检查同一个理由。
 --   3. **补全与 help 的输出按键排序**。`next` 不保证顺序，「候选列表稳定」这条判据没有排序就
 --      测不住（`Format` 的键排序是同一条纪律）。
+--   4. **错误文本按尾巴截断**（见 `errorText`）：`error()` 带路径前缀，按头截会把原因整个截掉。
+--   5. **`ArgSpec.kind` 收 `string`、由注册期校验挡**（见 `ArgSpec`）：union 在这里的收益是零，
+--      成本是每一个注册点都要抄 cast。
 --
 -- 权限钩子的失败模式是**拒绝**（fail closed）：钩子自己抛错时如果按「允许」处理，就等于把
 -- 安全检查的默认值设成了开门 —— 那种默认值只在出事那天才被发现。
@@ -27,10 +30,17 @@ local Record = require(script.Parent.Record)
 
 local Command = {}
 
---[=[ 一个参数的声明。`kind` 只有三种：解析规则要少，人才记得住语法。]=]
+--[=[ 允许的三种 `kind`。`ArgSpec.kind` 的类型是 `string` 而不是这个 union，理由见下面。]=]
+export type ArgKind = "string" | "number" | "boolean"
+
+--[=[ 一个参数的声明。]=]
 export type ArgSpec = {
 	name: string,
-	kind: "string" | "number" | "boolean",
+	-- 类型上收 `string`、合法性由注册期的 `KINDS` 挡，而不是写三字面量的 union：字符串字面量
+	-- 嵌在表字面量里会被摊平成 `string`，于是**每一个**注册点都要补一遍 cast（CI 实测：15 例
+	-- 自检里 8 例同一条报错，报错点还落在整张表上）。取舍与 `Record.New(level: any)` 相同 ——
+	-- 「编译期能挡、但代价是全部调用点都要抄 cast」的地方，本仓选择运行期挡 + 一条准确错误。
+	kind: string,
 	optional: boolean?,
 	-- 默认值只允许标量（含省略）。理由有两个：一是它要抄进 `help` 文本给人看，
 	-- 塞一个表进去就等于让「help 说的」与「跑出来的」由两套代码决定；二是类型上写 `any`
@@ -93,6 +103,31 @@ local function clip(text: string, limit: number): string
 		return text
 	end
 	return string.sub(text, 1, limit) .. "…"
+end
+
+-- 单次错误文本的上限（字节）。给得比 `Level.Describe` 宽，是因为错误信息里「路径 + 原因」是
+-- 常态，四十来字节只够装下路径。
+local ERROR_TEXT_LIMIT = 240
+
+--[=[
+	handler 与权限钩子抛出的东西要变成**一行**文本。两个讲究：
+	
+	* 截断要**留尾巴**。Luau 的 `error("...")` 会在返回值前面加 `路径:行号: `，按头截断（那正是
+	  `Level.Describe` 的做法）截出来的全是路径，原因恰好被切掉 —— 判据「错误要能说明为什么」
+	  会静默失效。W5 的自检第一次跑 CI 就是这样挂的，所以这里刻意反着截。
+	* 控制字符整类换成空格。错误文本要进控制台那一行，也就必须过 `Record.IsOneLine` 的判据；
+	  第三方 handler 里 `error(\`多行模板\`)` 是常见写法。
+]=]
+local function errorText(value: any): string
+	local text = (string.gsub(tostring(value), "%c", " "))
+	if #text <= ERROR_TEXT_LIMIT then
+		return text
+	end
+	local tail = string.sub(text, -(ERROR_TEXT_LIMIT - 3))
+	-- 掐掉可能被切坏的开头半个汉字：UTF-8 续接字节（\x80-\xBF）不成对出现就是坏码，
+	-- 宁可少一个字符，也不能交出一段非法 UTF-8 出去。
+	tail = (string.gsub(tail, "^[\x80-\xBF]+", ""))
+	return "…" .. tail
 end
 
 --[=[
@@ -484,7 +519,7 @@ function Command.Run(line: string, caller: any?): Result
 				ok = false,
 				name = entry.name,
 				output = nil,
-				error = `权限钩子抛错，按拒绝处理：{Level.Describe(allowed)}`,
+				error = `权限钩子抛错，按拒绝处理：{errorText(allowed)}`,
 			}
 		end
 		if allowed ~= true then
@@ -548,7 +583,7 @@ function Command.Run(line: string, caller: any?): Result
 			ok = false,
 			name = entry.name,
 			output = nil,
-			error = `命令 {entry.name} 抛错：{Level.Describe(output)}`,
+			error = `命令 {entry.name} 抛错：{errorText(output)}`,
 		}
 	end
 	succeededTotal += 1

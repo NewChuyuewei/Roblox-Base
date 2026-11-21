@@ -1104,8 +1104,10 @@ local cases: { { name: string, run: () -> () } } = {
 		run = function()
 			Command.Register("greet", {
 				help = "打招呼",
+				-- 两个兄弟元素要把字段抄齐（`optional`/`default` 都在）：数组的元素类型是在兄弟之间
+				-- 统一的，不是拿 ArgSpec 去判的，缺一个字段就报「missing field」而报错点在整张表上。
 				args = {
-					{ name = "who", kind = "string" },
+					{ name = "who", kind = "string", optional = false, default = nil },
 					{ name = "times", kind = "number", optional = true, default = 1 },
 				},
 			}, function(context: Command.Context): string?
@@ -1222,6 +1224,22 @@ local cases: { { name: string, run: () -> () } } = {
 				stats.errored == 1 and stats.succeeded == 1,
 				`三类失败要分开记账：errored={stats.errored} succeeded={stats.succeeded}`
 			)
+			-- 超长错误必须**留下尾巴**：Luau 给 `error()` 的返回值加的路径前缀比原因长，按头截断
+			-- 会把原因整个切掉。这一条就是 W5 自检第一次跑 CI 时的真实失败，判据要留在用例里。
+			Command.Register("longboom", "尾巴型错误", function(): string?
+				error(string.rep("x", 300) .. "真正的原因")
+			end)
+			local longText = tostring(Command.Run("longboom").error)
+			expect(
+				string.find(longText, "真正的原因", 1, true) ~= nil,
+				`超长错误要留尾巴，实际开头是 {string.sub(longText, 1, 60)}`
+			)
+			expect(
+				string.find(longText, "…", 1, true) ~= nil,
+				"截过要标出来，别让人以为那是全文"
+			)
+			expect(#longText < 400, `截断要有上限，实际 {#longText} 字节`)
+			expect(string.find(longText, "\n", 1, true) == nil, "错误文本必须仍是一行")
 		end,
 	},
 	{
@@ -1315,7 +1333,7 @@ local cases: { { name: string, run: () -> () } } = {
 			expectFails(function()
 				Command.Register(
 					"badkind",
-					{ args = { { name = "v", kind = "int" :: any } } },
+					{ args = { { name = "v", kind = "int" } } }, -- 非法 kind 由注册期挡下
 					function(): string?
 						return nil
 					end
@@ -1325,7 +1343,9 @@ local cases: { { name: string, run: () -> () } } = {
 				Command.Register("order", {
 					args = {
 						{ name = "a", kind = "string", optional = true },
-						{ name = "b", kind = "string" },
+						-- `optional = false` 要写出来：兄弟元素字段形状不一致时，Luau 在数组的**元素类型**上判
+						-- 「缺字段」（不是对 ArgSpec 判的），报错点落在整张表上，读起来完全不知道在说什么。
+						{ name = "b", kind = "string", optional = false },
 					},
 				}, function(): string?
 					return nil
