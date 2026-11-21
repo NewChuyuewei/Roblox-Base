@@ -4,7 +4,8 @@
 -- 入口：`require(ReplicatedStorage.Neon.Neon)`（`.plan/CARBON.md` §3.1：入口是 `<root>/<组件名>.luau`）。
 --
 -- 门面上只放两类东西：**发射**（`Log` + 五个级别简写 + `Channel`）与**接线**
--- （`AddSink` / `RemoveSink` / `SetClock` / `Stats` / `Reset`）。级别定义、记录结构、
+-- （`AddSink` / `RemoveSink` / `SetClock` / `Stats` / `Reset`），外加两个只读的接缝
+-- （`Neon.Format` / `Neon.Filter`）与一个守卫 `Neon.Enabled`。级别定义、记录结构、
 -- 环形缓冲各自住在邻居模块；这里转出的 `Neon.Level` 等字段是**同一张表的引用**而不是副本
 -- —— 抄一份出来就有了第二套真相，改一处忘另一处，两边就开始漂移。
 --
@@ -21,6 +22,7 @@ local RingSink = require(script.Parent.RingSink)
 local Channel = require(script.Parent.Channel)
 local Publish = require(script.Parent.Publish)
 local Format = require(script.Parent.Format)
+local Filter = require(script.Parent.Filter)
 
 local Neon = {}
 
@@ -29,6 +31,7 @@ Neon.Record = Record
 Neon.Sink = Sink
 Neon.RingSink = RingSink
 Neon.Format = Format
+Neon.Filter = Filter
 
 --[=[
 	打印入口。`level` 可以是级别名或可规范化的字符串（`"INFO"` 可用，`"notice"` 抛错）。
@@ -77,6 +80,16 @@ function Neon.RemoveSink(target: Sink.Sink | string): boolean
 	return Sink.Remove(target)
 end
 
+--[=[
+	热路径守卫：`if Neon.Enabled("debug", "net") then Neon.Debug("net", 那段拼装很贵的正文) end`。
+	
+	它只看级别门槛，**不消费限速与折叠的账** —— 探测一次就吃掉一格配额的话，「加个守卫」
+	反而让日志更少，这种反馈太坏了。
+]=]
+function Neon.Enabled(level: any, channel: string?): boolean
+	return Filter.Allows(level, channel)
+end
+
 --[=[ 当前注册数与名字，按注册顺序。]=]
 function Neon.SinkNames(): { string }
 	return Sink.Names()
@@ -94,13 +107,27 @@ end
 	「几条 × 几个输出端」。把它们放一起返回而不做相等断言，是因为输出端数量由宿主决定，
 	核心不能假设有几个。
 ]=]
-function Neon.Stats(): { logged: number, sinks: number, delivered: number, failed: number }
+function Neon.Stats(): {
+	logged: number,
+	sinks: number,
+	delivered: number,
+	failed: number,
+	admitted: number,
+	levelSuppressed: number,
+	rateSuppressed: number,
+	repeatSuppressed: number,
+}
 	local sinkStats = Sink.Stats()
+	local filterStats = Filter.Stats()
 	return {
 		logged = Publish.Logged(),
 		sinks = Sink.Count(),
 		delivered = sinkStats.delivered,
 		failed = sinkStats.failed,
+		admitted = filterStats.admitted,
+		levelSuppressed = filterStats.levelSuppressed,
+		rateSuppressed = filterStats.rateSuppressed,
+		repeatSuppressed = filterStats.repeatSuppressed,
 	}
 end
 
@@ -112,6 +139,7 @@ end
 function Neon.Reset(): ()
 	Sink.Reset()
 	Publish.Reset()
+	Filter.Reset()
 	Record.SetClock(nil)
 end
 
