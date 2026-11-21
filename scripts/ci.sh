@@ -56,12 +56,12 @@ types() {
 	step rojo sourcemap default.project.json -o sourcemap.json
 	# types/globalTypes.None.d.luau 已 vendor 进仓库，这一步不需要联网。
 	# scripts/ 不在分析范围内：它们是 Lune 宿主脚本，require("@lune/*") 无法被解析。
-	# 目前只分析已有代码的两个组件；其余组件立项后把目录加到这一行。
+	# 只分析已经写了代码的组件；其余组件立项后把目录加到这一行（2026-11 起含 Neon）。
 	step luau-lsp analyze \
 		--sourcemap=sourcemap.json \
 		--definitions:@roblox=types/globalTypes.None.d.luau \
 		--base-luaurc=.luaurc \
-		src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL
+		src/ReplicatedStorage/Deuterium src/ReplicatedStorage/TritiumSQL src/ReplicatedStorage/Neon
 }
 
 build() {

@@ -622,3 +622,15 @@ stylua --config-path stylua.toml --check Deuterium TritiumSQL \
 | `TestContext.note` | `Testing/TestContext.luau` | 保留（报告细节） |
 | `InstanceTracker.ReleaseAll` | `Runtime/Platform/InstanceTracker.luau` | 保留（ShutdownManager 安全网，待接线） |
 | `UnreliableChannel`（整模块） | `Net/Core/UnreliableChannel.luau` | 保留：文件头自述“当前与 Channel 同一注册表，待 W2.5 换 UnreliableRemoteTransport” |
+
+
+---
+
+## 2026-11-21 · P2.W1 + P2.W2（`Neon` 立项：打印入口 + 输出端与环形缓冲）
+
+- 新增 `src/ReplicatedStorage/Neon/`：`Level` · `Record` · `Publish` · `Sink` · `RingSink` · `Channel` · `Neon` 七个核心模块（实测 **802** 行，预算 1.3k）+ `SelfTest.luau`（**445** 行、**19** 例，全部 headless）。
+- 发射路径只有一个 owner（`Publish.Emit`）：入口与 `Channel` 记录器共用，避免「两处校验不一致」。
+- 三条语义钉死：记录是调用时刻快照且冻结；未登记级别抛错而非降级；级别过滤不属于 `Sink`（归 `P2.W4`）。
+- 接入门禁：`tests/run.luau` 加 `Neon.Core` 套件；`scripts/ci.sh` 的 `types` 步骤把 `src/ReplicatedStorage/Neon` 纳入 `luau-lsp analyze`（照 ci.sh 原注释的指示「组件立项后把目录加到这一行」）；`AGENTS.md` 的本地复用清单同步。
+- `Neon` 零依赖、L0 不碰引擎：`grep -rn "game:\|game\.\|GetService(\|workspace\|Instance.new(\|task\." src/ReplicatedStorage/Neon/*.luau`（剔注释后）为空。
+- 待办：`P2.W3` 格式化 · `P2.W4` 过滤与限速 · `P2.W5` 命令 · `P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 20 → ≤3）。
