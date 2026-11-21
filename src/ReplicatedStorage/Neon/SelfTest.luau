@@ -1102,17 +1102,21 @@ local cases: { { name: string, run: () -> () } } = {
 	{
 		name = "W5·缺参数与类型不符都点名到具体是哪一项",
 		run = function()
-			Command.Register("greet", {
-				help = "打招呼",
-				-- 两个兄弟元素要把字段抄齐（`optional`/`default` 都在）：数组的元素类型是在兄弟之间
-				-- 统一的，不是拿 ArgSpec 去判的，缺一个字段就报「missing field」而报错点在整张表上。
-				args = {
-					{ name = "who", kind = "string", optional = false, default = nil },
-					{ name = "times", kind = "number", optional = true, default = 1 },
-				},
-			}, function(context: Command.Context): string?
-				return ("hi "):rep(tonumber(context.args.times) or 1) .. tostring(context.args.who)
-			end)
+			-- 字段不齐的兄弟元素，要给**数组本身**一个显式标注，让 Luau 逐个元素对着 `ArgSpec` 判。
+			-- 不标注时元素类型是在兄弟之间统一的：少一个字段报「missing field」；而把 `default = nil`
+			-- 抄齐更糟 —— 第一个元素的 `default` 被定成 `nil` 这个类型，第二个的 `default = 1` 反倒不
+			-- 兼容。两种形状都是这轮 types 门禁实测出来的，别凭直觉挑一种。
+			local greetArgs: { Command.ArgSpec } = {
+				{ name = "who", kind = "string" },
+				{ name = "times", kind = "number", optional = true, default = 1 },
+			}
+			Command.Register(
+				"greet",
+				{ help = "打招呼", args = greetArgs },
+				function(context: Command.Context): string?
+					return ("hi "):rep(tonumber(context.args.times) or 1) .. tostring(context.args.who)
+				end
+			)
 			local missing = Command.Run("greet")
 			expect(
 				missing.ok == false and string.find(tostring(missing.error), "who", 1, true) ~= nil,
@@ -1330,6 +1334,10 @@ local cases: { { name: string, run: () -> () } } = {
 	{
 		name = "W5·坏 spec 在注册期就挡下，不留到 Run 才发现",
 		run = function()
+			local orderArgs: { Command.ArgSpec } = {
+				{ name = "a", kind = "string", optional = true },
+				{ name = "b", kind = "string" },
+			}
 			expectFails(function()
 				Command.Register(
 					"badkind",
@@ -1341,12 +1349,8 @@ local cases: { { name: string, run: () -> () } } = {
 			end, "kind 只能是三种之一", "kind")
 			expectFails(function()
 				Command.Register("order", {
-					args = {
-						{ name = "a", kind = "string", optional = true },
-						-- `optional = false` 要写出来：兄弟元素字段形状不一致时，Luau 在数组的**元素类型**上判
-						-- 「缺字段」（不是对 ArgSpec 判的），报错点落在整张表上，读起来完全不知道在说什么。
-						{ name = "b", kind = "string", optional = false },
-					},
+					-- 显式标注的理由见上面 `greet` 那条注释。
+					args = orderArgs,
 				}, function(): string?
 					return nil
 				end)
