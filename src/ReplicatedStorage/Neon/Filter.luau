@@ -59,11 +59,15 @@ type State = {
 	rateDropped: number, -- 攒着待交出去的限速丢弃数
 }
 
-local TRACE_RANK = Level.Rank(Level.Trace)
+-- `Level.Trace` 这类**常量字段**在调用点的类型是 `string`（可变表字段上的字面量不收窄，
+-- `:: Level` 也挡不住 —— `Level.luau` 文件头记着这条实测）。所以收窄只在这里做一次，
+-- 之后一律用 `TRACE`：比在四处各补一个 `:: Level.Level` 好，漏一处的症状是 types 门禁红一行。
+local TRACE = Level.Trace :: Level.Level
+local TRACE_RANK = Level.Rank(TRACE)
 
 -- 三项配置。`minLevel` 同时存名字与序值：名字给 `Options()` 读，序值给每次比较用
 -- —— 每条日志都现查一遍 `RANK` 是白付的哈希查找。
-local minLevel: Level.Level = Level.Trace
+local minLevel: Level.Level = TRACE
 local minRank = TRACE_RANK
 local rate = 0 -- 每频道每秒条数，0 = 不限
 local repeatWindow = 0 -- 折叠窗口（秒），0 = 关
@@ -138,7 +142,7 @@ end
 ]=]
 function Filter.SetMinimumLevel(level: any): ()
 	if level == nil then
-		minLevel = Level.Trace
+		minLevel = TRACE
 		minRank = TRACE_RANK
 	else
 		local normalized = Level.Normalize(level)
@@ -348,7 +352,7 @@ end
 \t是两类不同的污染，合在一起就没法只复现其中一类）。
 ]=]
 function Filter.Reset(): ()
-	minLevel = Level.Trace
+	minLevel = TRACE
 	minRank = TRACE_RANK
 	rate = 0
 	repeatWindow = 0
