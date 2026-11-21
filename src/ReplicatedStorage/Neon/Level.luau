@@ -33,10 +33,10 @@ local NAMES: { Level } = { "trace", "debug", "info", "warn", "error" }
 
 -- 常量出口，免得调用方到处写裸字符串（裸字符串打错一个字母是静默的，常量不是）。
 --
--- 先落到带标注的局部再摊平，而不是 `Level.Info = "info" :: Level`：可变表的字段类型会被
--- 推断**放大**，`"info"` 变成 `string`，于是 `Record.New(Level.Info, ...)` 这种调用在
--- strict 下直接是类型错误（`types` 门禁实测报的就是这一条）。字段上的 `::` .cast 挡不住
--- 这个放大，声明处的标注才挡得住。
+-- 注意一个实测到的类型行为：这些字段在**调用点**的类型是 `string`，不是 `Level` 联合 ——
+-- 可变表字段上的字面量类型会被推断放大，落到带标注的局部再摊平也一样（`types` 门禁两轮都
+-- 报在同一条 `Record.New(Level.Info, ...)` 上）。所以不要指望签名上的联合类型替你看住这里，
+-- 真正的大门是 `Level.Rank`：不在表里的名字当场抛错。`Record.New` 因此收 `any` 再校验。
 local levelTrace: Level = "trace"
 local levelDebug: Level = "debug"
 local levelInfo: Level = "info"
