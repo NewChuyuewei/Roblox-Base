@@ -136,8 +136,12 @@ function Sink.Broadcast(record: Record.Record): { delivered: number, failed: num
 	end
 	local delivered = 0
 	local failed = 0
-	-- errors 只在真的出错时才分配：happy path 上一个表都不用。
-	local errors: { string }? = nil
+	-- errors 只在真的出错时才分配：happy path 上一个表都不用。ownErrors 这个旗标
+	-- 不是多余的 —— 把 errors 声明成 `{ string }?` 再靠 `~= nil` 判别，类型系统不会在
+	-- 赋值后把 `bucket` 收窄回非空表，`table.insert` 就报 Expected {string} but {string}?
+	-- （types 门禁实测）。非空类型 + 独立旗标两边都干净。
+	local errors: { string } = EMPTY_ERRORS
+	local ownErrors = false
 	-- 先取长度再逐个索引：广播途中有新注册的不参与本轮（否则「谁会被叫到」
 	-- 取决于 sink 内部有没有副作用，这种不确定性在测试里根本复现不出来）。
 	for index = 1, count do
@@ -154,18 +158,17 @@ function Sink.Broadcast(record: Record.Record): { delivered: number, failed: num
 				delivered += 1
 			else
 				failed += 1
-				local bucket = errors
-				if bucket == nil then
-					bucket = {}
-					errors = bucket
+				if not ownErrors then
+					ownErrors = true
+					errors = {}
 				end
-				table.insert(bucket, `{sink.name}: {tostring(err)}`)
+				table.insert(errors, `{sink.name}: {tostring(err)}`)
 			end
 		end
 	end
 	deliveredTotal += delivered
 	failedTotal += failed
-	return { delivered = delivered, failed = failed, errors = errors or EMPTY_ERRORS }
+	return { delivered = delivered, failed = failed, errors = errors }
 end
 
 --[=[

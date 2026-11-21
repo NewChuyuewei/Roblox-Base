@@ -676,9 +676,11 @@ local cases: { { name: string, run: () -> () } } = {
 				"空结果内容正确"
 			)
 			expect(result == Sink.Broadcast(record), "同一个共享表：省掉每条日志一次的分配")
+			-- 只断言「抛错」，不断言错误文本：冻结表的报错措辞归运行时（Lune 与 Studio
+			-- 就不一样），把它钉进用例会变成「升级运行时先炸测试」。
 			expectFails(function()
 				(result :: any).delivered = 7
-			end, "共享结果必须冻结，否则一个调用方能改坏别人的读数", "frozen")
+			end, "共享结果必须冻结，否则一个调用方能改坏别人的读数")
 		end,
 	},
 }

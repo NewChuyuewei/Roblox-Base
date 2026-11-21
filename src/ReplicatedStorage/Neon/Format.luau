@@ -248,10 +248,27 @@ local function onPath(path: { any }, size: number, value: any): boolean
 	return false
 end
 
+-- 折叠视图里的「元素数」。为什么不写 `#value`：`{a=1,b=2}` 的 `#` 是 0（它没有数组部分），
+-- 于是日志里出现 `<table:0>`，而下面其实压着 2 个键 —— 那个数正是摘要唯一要传达的信息。
+-- 数到 MAX_KEYS 就停：一个万键表不该为了折叠视图付整表遍历的钱，`64+` 已经说明问题。
+local function countFields(value: any): string
+	local dict = value :: { [string]: any }
+	local count = 0
+	for _ in dict do
+		count += 1
+		if count >= MAX_KEYS then
+			return tostring(MAX_KEYS) .. "+"
+		end
+	end
+	return tostring(count)
+end
+
 local function renderValue(value: any, depth: number, path: { any }, pathSize: number): string
 	local kind = typeof(value)
 	if kind == "string" then
-		return `"${truncate(toSingleLine(value :: string), maxValueLength)}`
+		-- 收尾引号必须齐：少一个的话 `name = "loop"` 会印成 `name="loop`，读日志的人
+		-- 分不清是被截断了还是引号本来就在（W3 自检第一轮就是这么把它抓出来的）。
+		return `"{truncate(toSingleLine(value :: string), maxValueLength)}"`
 	elseif kind == "number" or kind == "boolean" then
 		-- 数字交给 Luau 的 tostring：精度固定，跨机器一致
 		return tostring(value)
@@ -261,7 +278,7 @@ local function renderValue(value: any, depth: number, path: { any }, pathSize: n
 		end
 		if depth >= maxDepth then
 			-- 带上元素数：看到 `<table:9>` 至少知道下面还有多少东西没印
-			return `<table:{#value}>`
+			return `<table:{countFields(value)}>`
 		end
 		local dict = value :: { [string]: any }
 		local keys: { any } = {}
@@ -320,24 +337,48 @@ end
 --[=[
 	一条记录 → 一行文本：`[03:22:01] INFO  combat: hit {hp=1, world="w1"}`。
 
-	没有字段时不打空 `{}`：控制台里绝大多数行没有字段，摆一串花括号纯是视觉噪音。
+	频道排在正文之前：它是日志的第一索引，控制台里按频道筛就是筛这一段。
+	没有字段时不打空 `{}` —— 绝大多数行除了正文什么都没有，摆一串花括号纯是噪音。
+
+	本函数对**裸记录**（没走 `Record.New` 的表）也要出活：缺哪栏就省哪栏，不印 "nil"，
+	也不抛错。打印这一层抛错的代价是这条日志彻底消失，比缺一栏信息糟得多；真正必须抛的
+	只有一件 —— 传进来的根本不是记录。
 ]=]
 function Format.Line(record: Record.Record): string
 	assert(type(record) == "table", `[Neon.Format] Line 需要一条记录，收到 {Level.Describe(record)}`)
+
 	local level = tostring(record.level)
 	if #level < LEVEL_WIDTH then
 		level = level .. string.rep(" ", LEVEL_WIDTH - #level)
 	end
-	local message, dropped = truncate(toSingleLine(tostring(record.message)), maxMessageLength)
-	local line = string.format("[%s] %s %s: ", Format.Time(record.time), string.upper(level), message)
+
+	-- 时间戳坏了（nan / inf / 越界）→ `<time?>`，正文照打；见 Format.Time。
+	local head = string.format("[%s] %s", Format.Time(record.time), string.upper(level))
+	local rawChannel: any = record.channel
+	if type(rawChannel) == "string" and rawChannel ~= "" then
+		-- 频道再过一遍 toSingleLine 只为裸记录：`Record.New` 已经挡过换行，那条路径上这里
+		-- 只会命中 plain find 短路，不付 gsub 的构造成本。
+		head = head .. " " .. toSingleLine(rawChannel :: string) .. ": "
+	else
+		head = head .. " "
+	end
+
+	local rawMessage: any = record.message
+	local messageText = if rawMessage == nil then "" else tostring(rawMessage)
+	local message, dropped = truncate(toSingleLine(messageText), maxMessageLength)
+	local line = head .. message
+	-- `(+N)` 紧跟被截的正文，不放整行末尾：放到末尾会让人以为少掉的是行尾的字段，
+	-- 而实际少掉的是正文 —— 标错位置的截断标记比没标记更容易把人带偏。
 	if dropped > 0 then
 		line = line .. `(+{dropped})`
 	end
+
 	local fields = record.fields
 	if fields ~= nil and next(fields) ~= nil then
 		-- 字段从 maxDepth - 1 起步：记录本身算一层，嵌套还能再展开一层
 		line = line .. " " .. renderValue(fields, maxDepth - 1, {}, 0)
 	end
+
 	-- 省略号与 `(+N)` 都在上限之外：上限管的是正文，标记是附加说明。为了把「截掉多少」
 	-- 说清楚，允许整行比上限多几个字节 —— 这比「凑整数上限而丢掉长度信息」诚实。
 	local clipped, lineDropped = truncate(line, maxLineLength)
