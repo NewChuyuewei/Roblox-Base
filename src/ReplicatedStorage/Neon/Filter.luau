@@ -59,10 +59,12 @@ type State = {
 	rateDropped: number, -- 攒着待交出去的限速丢弃数
 }
 
--- `Level.Trace` 这类**常量字段**在调用点的类型是 `string`（可变表字段上的字面量不收窄，
--- `:: Level` 也挡不住 —— `Level.luau` 文件头记着这条实测）。所以收窄只在这里做一次，
--- 之后一律用 `TRACE`：比在四处各补一个 `:: Level.Level` 好，漏一处的症状是 types 门禁红一行。
-local TRACE = Level.Trace :: Level.Level
+-- `Level.Trace` 这类**常量字段**在调用点的类型是 `string`（可变表字段上的字面量会被推断
+-- 放大，`Level.luau` 文件头记着这条实测），而 `Level.Rank` 收的是联合类型 —— 于是
+-- `Level.Rank(Level.Trace)` 过不了门禁，`local TRACE = Level.Trace :: Level.Level` 也不行：
+-- **没有标注的 local 会把 initializer 再摊平一次**（这轮 CI 就是这么抓的）。两边都占住：
+-- 标注 + 显式收窄，一次到位。之后各处直接用 `TRACE`，不再重复写 cast。
+local TRACE: Level.Level = Level.Trace :: Level.Level
 local TRACE_RANK = Level.Rank(TRACE)
 
 -- 三项配置。`minLevel` 同时存名字与序值：名字给 `Options()` 读，序值给每次比较用
