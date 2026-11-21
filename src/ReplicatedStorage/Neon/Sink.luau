@@ -35,11 +35,11 @@ local failedTotal = 0
 local EMPTY_ERRORS: { string } = table.freeze({}) :: { string }
 local EMPTY_RESULT = table.freeze({ delivered = 0, failed = 0, errors = EMPTY_ERRORS })
 
---[=[	构造一个输出端。`name` 参与重复注册检查与错误信息，所以不许为空、不许带换行。]=]
+--[=[	构造一个输出端。`name` 参与重复注册检查与错误信息，所以不许为空、不许带控制字符（判据在 `Record.IsOneLine`，与频道名同一份）。]=]
 function Sink.New(name: string, write: (Record.Record) -> ()): Sink
 	assert(
 		Record.IsOneLine(name),
-		`[Neon.Sink] name 必须是不含换行的非空字符串，收到 {Level.Describe(name)}`
+		`[Neon.Sink] name 必须是不含控制字符的非空字符串，收到 {Level.Describe(name)}`
 	)
 	assert(
 		type(write) == "function",

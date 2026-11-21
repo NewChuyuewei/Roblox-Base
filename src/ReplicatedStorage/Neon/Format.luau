@@ -46,9 +46,18 @@ local LEVEL_WIDTH = 5
 -- 单个表最多展开多少个键。日志不是导出工具：一个万键的表在这里只该露个边。
 local MAX_KEYS = 64
 
+-- `maxDepth` 自己的上限。为什么要有：折叠是这个模块唯一的递归保护，能把它设成
+-- `math.huge`（类型合法、`floor` 比对也过得去）就等于关掉它 —— 一个几千层的表
+-- （反序列化出来的链式结构长这样）会把宿主的 Lua 栈撑爆。日志组件不许有让宿主崩掉的路径。
+-- 32 层已远超任何人类会读的日志深度；真要 33 层，说明该打的是摘要而不是结构。
+local MAX_DEPTH_LIMIT = 32
+
 --[=[
-	渲染上限。四项都可选，缺省的保持原值。非法值抛错而不是夹紧（clamp）：
-	夹紧会把「我以为是 200」变成「实际是 1」，而这种偏差只在日志被截得莫名其妙时才暴露。
+	渲染上限。四项都可选，缺省的保持原值。
+
+	非法值抛错而不是夹紧（clamp）：夹紧会把「我以为是 200」变成「实际是 1」，而这种偏差
+	只在日志被截得莫名其妙时才暴露。**必须是有限数**，且 `maxDepth` 有上界（`MAX_DEPTH_LIMIT`）：
+	一个能把折叠关掉的配置不是「放宽限制」，是把唯一的递归保护拆了。
 ]=]
 function Format.SetLimits(options: {
 	maxDepth: number?,
@@ -61,20 +70,25 @@ function Format.SetLimits(options: {
 		`[Neon.Format] SetLimits 需要一个表，收到 {Level.Describe(options)}`
 	)
 
-	local function checkInteger(value: any, name: string, lowerBound: number): number?
+	local function checkInteger(value: any, name: string, lowerBound: number, upperBound: number?): number?
 		if value == nil then
 			return nil
 		end
+		local span = if upperBound == nil then `≥ {lowerBound}` else `{lowerBound}..{upperBound}`
+		-- `value < math.huge` 不是多余的：`math.floor(math.huge) == math.huge` 成立，只查
+		-- 「整数 + 下界」的话 `+inf` 会被当成合法上限放行（`nan` 则由 `floor` 比对挡下）。
 		assert(
 			type(value) == "number"
 				and math.floor(value :: number) == (value :: number)
-				and value >= lowerBound,
-			`[Neon.Format] {name} 必须是 ≥ {lowerBound} 的整数，收到 {Level.Describe(value)}`
+				and value >= lowerBound
+				and value < math.huge
+				and (upperBound == nil or value <= upperBound),
+			`[Neon.Format] {name} 必须是 {span} 的整数，收到 {Level.Describe(value)}`
 		)
 		return value :: number
 	end
 
-	local depth = checkInteger(options.maxDepth, "maxDepth", 1)
+	local depth = checkInteger(options.maxDepth, "maxDepth", 1, MAX_DEPTH_LIMIT)
 	-- 下限是省略号本身：留给正文字数 ≤ 0 的「截断」只会输出一个省略号，不如直接拒。
 	local valueLength = checkInteger(options.maxValueLength, "maxValueLength", #ELLIPSIS + 1)
 	local messageLength = checkInteger(options.maxMessageLength, "maxMessageLength", #ELLIPSIS + 1)
@@ -188,28 +202,32 @@ local function truncate(text: string, limit: number): (string, number)
 	return string.sub(text, 1, keep) .. ELLIPSIS, dropped
 end
 
--- 「单行文本」这条判据的守门人：换行与制表符转成可见转义。
--- 不折叠的后果很实际 —— 控制台列表错位，CI 里按行 grep 日志的规则会漏掉半条记录。
--- 先做一次 plain find：绝大多数日志没有换行，不该每次都付一次 gsub 的构造成本。
+-- 「单行文本」这条判据的守门人：**整个控制字符类**都转成可见转义，不只是换行与制表符。
+-- 漏掉的那几个各有具体后果：`\0` 让 grep / ripgrep 把整个日志文件判成二进制并停止打印
+-- 匹配行（症状是「这条日志没打出来」）；`\027` 开头的 ANSI 序列会被宿主终端执行 ——
+-- 日志本来是人核对现场的地方，让它反过来影响终端状态就是让证据撒谎；`\v` `\f` 在很多
+-- 终端里同样换行，控制台列表就此错位。
+-- 快路径是一次 `%c` 扫描：绝大多数日志一个控制字符都没有，扫过即返回，不进 gsub。
+local function escapeControl(char: string): string
+	local byte = string.byte(char)
+	if byte == 10 then
+		return "\\n"
+	elseif byte == 13 then
+		return "\\r"
+	elseif byte == 9 then
+		return "\\t"
+	end
+	-- 其余控制字符（含 `\0` 与 DEL）走 `\xNN`：可见、可 grep、也比「挑几个转义、剩下的原样」
+	-- 少一类「今天漏了某个码位，明天再补」的补丁。
+	return string.format("\\x%02x", byte or 0)
+end
+
 local function toSingleLine(text: string): string
-	if
-		string.find(text, "\n", 1, true) == nil
-		and string.find(text, "\r", 1, true) == nil
-		and string.find(text, "\t", 1, true) == nil
-	then
+	if string.find(text, "%c") == nil then
 		return text
 	end
 	-- 外层括号是必要的：`gsub` 返回 (string, number)，而本函数签名只交出一个 string。
-	return (
-		string.gsub(text, "[\r\n\t]", function(char: string): string
-			if char == "\n" then
-				return "\\n"
-			elseif char == "\r" then
-				return "\\r"
-			end
-			return "\\t"
-		end)
-	)
+	return (string.gsub(text, "%c", escapeControl))
 end
 
 -- 键序：先按类型分组，数字组内走数值序，其余走 tostring 的字典序。
@@ -361,7 +379,7 @@ function Format.Line(record: Record.Record): string
 	local head = string.format("[%s] %s", Format.Time(record.time), string.upper(level))
 	local rawChannel: any = record.channel
 	if type(rawChannel) == "string" and rawChannel ~= "" then
-		-- 频道再过一遍 toSingleLine 只为裸记录：`Record.New` 已经挡过换行，那条路径上这里
+		-- 频道再过一遍 toSingleLine 只为裸记录：`Record.New` 已经挡过控制字符，那条路径上这里
 		-- 只会命中 plain find 短路，不付 gsub 的构造成本。
 		head = head .. " " .. toSingleLine(rawChannel :: string) .. ": "
 	else

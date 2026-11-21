@@ -72,7 +72,7 @@ end
 function Channel.New(name: string, fields: Record.Fields?): Recorder
 	assert(
 		Record.IsOneLine(name),
-		`[Neon.Channel] 频道名必须是不含换行的非空字符串，收到 {Level.Describe(name)}`
+		`[Neon.Channel] 频道名必须是不含控制字符的非空字符串，收到 {Level.Describe(name)}`
 	)
 	return make(name, Record.MergeFields(fields, nil))
 end
