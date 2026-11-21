@@ -104,7 +104,10 @@ function RingSink.New(capacity: number, name: string?): Ring
 			return dropped
 		end,
 		Records = function(): { Record.Record }
+			-- 交给调用方的是**快照**（新数组）：W7 的控制台会把它攥在手里跨帧渲染，而这几帧里
+			-- 日志还在继续写。返回活引用的话，界面会在没人动过的情况下自己变。
 			local out: { Record.Record } = table.create(count)
+			local filled = 0
 			for offset = 1, count do
 				local index: number
 				if count < capacityValue then
@@ -116,7 +119,11 @@ function RingSink.New(capacity: number, name: string?): Ring
 				end
 				local record = buffer[index]
 				if record ~= nil then
-					table.insert(out, record)
+					-- 自己数下标，不用 `table.insert`：`out` 已按 count 预分配，`table.insert`
+					-- 每次还要回头量一遍长度。留着 nil 判断是因为它顺带兜住「count 与实际条目
+					-- 不一致」——那种不一致只可能来自本模块写错，兜住比把洞留给 `#out` 好。
+					filled += 1
+					out[filled] = record
 				end
 			end
 			return out

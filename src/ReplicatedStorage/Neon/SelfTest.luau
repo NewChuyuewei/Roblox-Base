@@ -683,6 +683,126 @@ local cases: { { name: string, run: () -> () } } = {
 			end, "共享结果必须冻结，否则一个调用方能改坏别人的读数")
 		end,
 	},
+
+	-- ---------- P2.W3 加固：控制字符与「能被关掉的上限」 ----------
+	{
+		name = "W3 加固·渲染结果里不残留任何裸控制字符（NUL / DEL / ANSI 都算）",
+		run = function()
+			local samples = {
+				"a\0b", -- NUL：一个就够让 grep 把整份日志判成二进制并停止打印匹配行
+				"\027[31mred\027[0m", -- ANSI：原样交出去就被宿主终端执行
+				"\a\b\v\f", -- 其余空白类：控制台列表就此错位
+				"del\127end",
+				"tab\there",
+			}
+			for index = 1, #samples do
+				local sample = samples[index]
+				local rendered = Format.Value(sample)
+				expect(
+					string.find(rendered, "%c", 1) == nil,
+					`样本 {index} 渲染后仍有裸控制字符：{string.format("%q", rendered)}`
+				)
+				local line = Format.Line(Neon.Info("c", sample))
+				expect(
+					string.find(line, "%c", 1) == nil,
+					`样本 {index} 的整行仍有裸控制字符：{string.format("%q", line)}`
+				)
+				expect(
+					string.find(line, sample, 1, true) == nil,
+					`样本 {index} 原文照抄进行里了，转义没生效`
+				)
+			end
+		end,
+	},
+	{
+		name = "W3 加固·ESC 变可见形式；(+N) 按渲染后的字节计",
+		run = function()
+			local text = Format.Value("\027[31m")
+			expect(
+				string.find(text, "\\x1b[31m", 1, true) ~= nil,
+				`ESC 要印成 \\x1b，实际：{string.format("%q", text)}`
+			)
+			-- 转义会放大正文，所以 `(+N)` 数的是「渲染后」被丢掉的字节数。这条规则钉在这里，
+			-- 免得日后被「顺手改成按原文计」—— 那样上限就管不住实际输出宽度了。
+			-- 4 个换行 → 8 字节渲染；上限 6 含省略号 3 字节 → 留 3 字节 → 丢 5。
+			Format.SetLimits({ maxMessageLength = 6 })
+			local line = Format.Line(Neon.Info("c", "\n\n\n\n"))
+			expect(
+				string.find(line, "(+5)", 1, true) ~= nil,
+				`要标出丢了 5 个渲染字节，实际：{line}`
+			)
+		end,
+	},
+	{
+		name = "W1/W3 交界·会被印出来的标识符拒绝一切控制字符",
+		run = function()
+			expectFails(function()
+				Neon.Info("a\0b", "x")
+			end, "频道名含 NUL 必须抛错", "channel")
+			expectFails(function()
+				Neon.Info("a\027b", "x")
+			end, "频道名含 ESC 必须抛错")
+			expectFails(function()
+				Neon.Info("a\tb", "x")
+			end, "制表符也挡：它会把定宽级别与正文之间的那点错位放大成整列错位")
+			expectFails(function()
+				Sink.New("na\0me", function(_record: Record.Record) end)
+			end, "输出端名归同一份判定管")
+			expectFails(function()
+				Neon.Channel("a\vb")
+			end, "记录器名也归同一份判定管")
+		end,
+	},
+	{
+		name = "W3 加固·maxDepth 不能被配成「没有上限」",
+		run = function()
+			-- `math.floor(math.huge) == math.huge` 成立，只查「整数 + 下界」会把 +inf 放进来，
+			-- 而 +inf 深度 = 折叠被关掉。折叠是这个模块唯一的递归保护。
+			expectFails(function()
+				Format.SetLimits({ maxDepth = math.huge })
+			end, "上限不能设成无穷", "maxDepth")
+			expectFails(function()
+				Format.SetLimits({ maxDepth = 0 / 0 })
+			end, "nan 也不行")
+			expectFails(function()
+				Format.SetLimits({ maxDepth = 1000 })
+			end, "深度上限本身必须有上界", "maxDepth")
+			expect(Format.Limits().maxDepth == 2, "抛错的调用一项都不许生效")
+			Format.SetLimits({ maxDepth = 8 })
+			expect(Format.Limits().maxDepth == 8, "合法范围内的放宽要真的生效")
+			-- 200 层链式表：折叠在就只是「看不深」，折叠被关掉就是栈溢出 —— 那种失败连报告
+			-- 都留不下，所以这一例断言的是「不炸 + 被折叠 + 长度受控」，不是具体文本。
+			local deep: any = { leaf = 1 }
+			for _ = 1, 200 do
+				deep = { next = deep }
+			end
+			local text = Format.Value(deep)
+			expect(string.find(text, "<table:", 1, true) ~= nil, "深结构必须被折叠")
+			expect(#text < 2000, `渲染长度必须受控，实际 {#text}`)
+		end,
+	},
+	{
+		name = "W2 加固·Records() 是快照：之后的写入不动已交出去的那份",
+		run = function()
+			local ring = RingSink.New(3)
+			ring.Write(Record.New("info", "c", "one"))
+			ring.Write(Record.New("info", "c", "two"))
+			local snapshot = ring.Records()
+			expect(#snapshot == 2, "先读到两条")
+			ring.Write(Record.New("info", "c", "three"))
+			ring.Write(Record.New("info", "c", "four"))
+			expect(
+				#snapshot == 2 and snapshot[1].message == "one" and snapshot[2].message == "two",
+				"W7 的控制台会把它攥在手里跨帧渲染，那份数组不能自己变"
+			)
+			local now = ring.Records()
+			expect(#now == 3, "写满后仍只留容量那么多条")
+			expect(
+				now[1].message == "two" and now[2].message == "three" and now[3].message == "four",
+				"由旧到新，覆盖掉的是最旧那条"
+			)
+		end,
+	},
 }
 
 --[=[ 跑全部用例，返回是否全过。CI 的 `test` 阶段按返回值定成败。]=]

@@ -92,18 +92,21 @@ local function copyFields(fields: any): Fields
 end
 
 --[=[
-	频道名 / 输出端名这类「会被印出来的标识符」是否安全：非空、且不含换行。
+	频道名 / 输出端名这类「会被印出来的标识符」是否安全：非空，且**不含任何控制字符**。
 
-	用两次 plain find 而不是一个 `"[\r\n]"` 模式：这个判定在**每条记录**上都要跑，
-	而模式匹配要走一遍 pattern VM，两条定长查找明显便宜。含换行为什么必须挡 ——
-	`Format.Line` 与宿主控制台都按行处理，一条记录裂成两行之后，按行 grep 的规则会漏掉
-	半条，而人看到的症状是「这条日志没打出来」。
+	这里是全工程唯一的一份判定：`Record.New` 的 channel、`Channel.New` 的名字、`Sink` 的
+	name 过去各写一份 `[\r\n]` 模式，三份就会漂成三个答案 —— 同一个频道名在一个入口合法、
+	在另一个入口抛错，而这类 bug 的报告方式是「某个频道偶尔没日志」。
+
+	覆盖面从「换行」扩到整个控制字符类，是因为漏掉的码位各有具体后果：带 `\0` 的名字会让
+	grep / ripgrep 把整个日志文件判成二进制并停止打印匹配行；带 `\027` 的把 ANSI 序列送进
+	终端。代价是一次 `%c` 扫描（单遍），原先是两遍 plain find，这里没有变贵。
 ]=]
 function Record.IsOneLine(text: string): boolean
 	if type(text) ~= "string" or #text == 0 then
 		return false
 	end
-	return string.find(text, "\n", 1, true) == nil and string.find(text, "\r", 1, true) == nil
+	return string.find(text :: string, "%c") == nil
 end
 
 --[=[
@@ -117,11 +120,11 @@ end
 -- `Level.Level`（见 `level :: Level.Level`），下游拿到的是收窄过的联合，没被放宽。
 function Record.New(level: any, channel: string, message: string, fields: Fields?): Record
 	-- Rank 会校验级别名；channel/message 各挡一类下游爆炸：
-	-- 频道里带换行会撕开 W3 的单行格式，message 非字符串通常是把表塞错了位置。
+	-- 频道里带控制字符会撕开 W3 的单行格式，还会污染按行 grep 的日志文件，message 非字符串通常是把表塞错了位置。
 	Level.Rank(level)
 	assert(
 		Record.IsOneLine(channel :: string),
-		`[Neon.Record] channel 必须是不含换行的非空字符串，收到 {Level.Describe(channel)}`
+		`[Neon.Record] channel 必须是不含控制字符的非空字符串，收到 {Level.Describe(channel)}`
 	)
 	assert(
 		type(message) == "string",
