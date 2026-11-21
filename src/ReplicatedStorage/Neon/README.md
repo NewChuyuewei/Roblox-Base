@@ -16,16 +16,16 @@
 
 | 模块 | 负责什么 | 行 |
 | --- | --- | --- |
-| `Level.luau` | 五个级别的名字、序、规范化。**只有这里有顺序表**：入口、过滤器、格式化共用它 | 108 |
-| `Record.luau` | 记录结构 `{time, level, channel, message, fields}`、构造期校验、冻结，以及**可注入时钟** | 152 |
+| `Level.luau` | 五个级别的名字、序、规范化。**只有这里有顺序表**：入口、过滤器、格式化共用它 | 119 |
+| `Record.luau` | 记录结构 `{time, level, channel, message, fields}`、构造期校验、冻结，以及**可注入时钟** | 153 |
 | `Publish.luau` | 唯一的发射路径：校验级别 → 构造记录 → 投递。`Neon.Log` 与 `Channel` 都走这里 | 52 |
-| `Sink.luau` | 输出端契约 `{ name, Write }`、注册表、带错误隔离的广播、投递计数 | 167 |
-| `RingSink.luau` | 内存环形缓冲：容量固定、写满覆盖最旧、`Records()` 由旧到新 | 127 |
+| `Sink.luau` | 输出端契约 `{ name, Write }`、注册表、带错误隔离的广播、投递计数 | 173 |
+| `RingSink.luau` | 内存环形缓冲：容量固定、写满覆盖最旧、`Records()` 由旧到新 | 140 |
 | `Channel.luau` | 绑定频道与固定上下文的记录器（`.` 调用；`With` 派生不改父记录器） | 80 |
 | `Neon.luau` | 门面：`Log` + 五个简写 + `Channel` + `AddSink/RemoveSink` + `SetClock` + `Stats/Reset` | 116 |
-| `SelfTest.luau` | 19 例判据断言（headless，`tests/run.luau` 的 `Neon.Core` 套件执行） | 445 |
+| `SelfTest.luau` | 19 例判据断言（headless，`tests/run.luau` 的 `Neon.Core` 套件执行） | 471 |
 
-核心合计 **802** 行（不含自检），对应 `P2.W1`(0.7k) + `P2.W2`(0.6k) 的预算 1.3k。
+核心合计 **833** 行（不含自检），对应 `P2.W1`(0.7k) + `P2.W2`(0.6k) 的预算 1.3k。
 
 ## 三条已经钉住的设计决定
 

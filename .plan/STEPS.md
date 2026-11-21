@@ -628,9 +628,10 @@ stylua --config-path stylua.toml --check Deuterium TritiumSQL \
 
 ## 2026-11-21 · P2.W1 + P2.W2（`Neon` 立项：打印入口 + 输出端与环形缓冲）
 
-- 新增 `src/ReplicatedStorage/Neon/`：`Level` · `Record` · `Publish` · `Sink` · `RingSink` · `Channel` · `Neon` 七个核心模块（实测 **802** 行，预算 1.3k）+ `SelfTest.luau`（**445** 行、**19** 例，全部 headless）。
+- 新增 `src/ReplicatedStorage/Neon/`：`Level` · `Record` · `Publish` · `Sink` · `RingSink` · `Channel` · `Neon` 七个核心模块（实测 **833** 行，预算 1.3k）+ `SelfTest.luau`（**471** 行、**19** 例，全部 headless）。
 - 发射路径只有一个 owner（`Publish.Emit`）：入口与 `Channel` 记录器共用，避免「两处校验不一致」。
 - 三条语义钉死：记录是调用时刻快照且冻结；未登记级别抛错而非降级；级别过滤不属于 `Sink`（归 `P2.W4`）。
 - 接入门禁：`tests/run.luau` 加 `Neon.Core` 套件；`scripts/ci.sh` 的 `types` 步骤把 `src/ReplicatedStorage/Neon` 纳入 `luau-lsp analyze`（照 ci.sh 原注释的指示「组件立项后把目录加到这一行」）；`AGENTS.md` 的本地复用清单同步。
 - `Neon` 零依赖、L0 不碰引擎：`grep -rn "game:\|game\.\|GetService(\|workspace\|Instance.new(\|task\." src/ReplicatedStorage/Neon/*.luau`（剔注释后）为空。
+- 门禁反馈实录（同一个 Wave 内跑了 4 轮 CI 才绿，记下来免得后人当成环境噪声）：`math.type` 在这个 Luau 构建里不存在（类型与运行期同时报）；`pcall` 保护一个不返回值的函数时，类型系统只给一个 boolean，接不住 `err`；可变表字段上的字符串字面量被放大成 `string`，于是 `Record.New(Level.Info, …)` 反而过不了 strict —— 改成「运行时 `Level.Rank` 校验 + 记录字段仍标 `Level.Level`」；`Dropped` 早先算成 `written - count`，把 `Reset()` 清掉的条数记成了丢失，被自己的自检当场抓住。
 - 待办：`P2.W3` 格式化 · `P2.W4` 过滤与限速 · `P2.W5` 命令 · `P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 20 → ≤3）。
