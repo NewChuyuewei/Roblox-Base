@@ -12,6 +12,7 @@ local Record = require(script.Parent.Record)
 local Sink = require(script.Parent.Sink)
 local RingSink = require(script.Parent.RingSink)
 local Format = require(script.Parent.Format)
+local Filter = require(script.Parent.Filter)
 local Neon = require(script.Parent.Neon)
 
 local SelfTest = {}
@@ -801,6 +802,251 @@ local cases: { { name: string, run: () -> () } } = {
 				now[1].message == "two" and now[2].message == "three" and now[3].message == "four",
 				"由旧到新，覆盖掉的是最旧那条"
 			)
+		end,
+	},
+
+	-- ---------- P2.W4：过滤与限速 ----------
+	{
+		name = "W4·低于全局门槛的记录不到达输出端（但调用方照样拿到记录）",
+		run = function()
+			Filter.SetMinimumLevel("warn")
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			local dropped = Neon.Info("c", "hidden")
+			expect(
+				dropped ~= nil,
+				"被挡掉的记录仍要返回：API 的形状不能取决于日志配置"
+			)
+			expect(#sink.Got() == 0, "低于门槛的一条也不许到输出端")
+			Neon.Warn("c", "kept")
+			expect(#sink.Got() == 1, "达到门槛的正常投递")
+			local stats = Filter.Stats()
+			expect(stats.levelSuppressed == 1, `门槛计数要单列，实际 {stats.levelSuppressed}`)
+			expect(stats.rateSuppressed == 0 and stats.repeatSuppressed == 0, "没开的开关不该记账")
+			expect(Neon.Stats().logged == 1, "投递数只数真投递的")
+		end,
+	},
+	{
+		name = "W4·每频道门槛盖过全局",
+		run = function()
+			Filter.SetMinimumLevel("warn")
+			Filter.SetChannelMinimum("chat", "error")
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			Neon.Warn("chat", " muted")
+			expect(#sink.Got() == 0, "chat 的门槛是 error，warn 进不来")
+			Neon.Error("chat", "loud")
+			expect(#sink.Got() == 1, "error 过")
+			Neon.Info("c", "x")
+			Neon.Warn("c", "y")
+			expect(#sink.Got() == 2, "别的频道仍走全局门槛")
+			expect(Filter.MinimumFor("chat") == "error", "读回来的覆盖值")
+			expect(Filter.MinimumFor("c") == "warn", "没覆盖的频道读回全局")
+			Filter.SetChannelMinimum("chat", nil)
+			expect(Filter.MinimumFor("chat") == "warn", "传 nil 取消覆盖")
+		end,
+	},
+	{
+		name = "W4·限速按注入时钟的日历秒走，丢弃数落在下一条",
+		run = function()
+			local now = 100
+			Neon.SetClock(function()
+				return now
+			end)
+			Filter.SetChannelRate("spam", 3)
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			for index = 1, 5 do
+				Neon.Info("spam", ("m%d"):format(index))
+			end
+			expect(#sink.Got() == 3, "同一秒内只放行配额那么多条")
+			now = 100.9
+			Neon.Info("spam", "still same second")
+			expect(#sink.Got() == 3, "窗口是日历秒，0.9 之后仍是同一秒")
+			now = 101
+			Neon.Info("spam", "next second")
+			expect(#sink.Got() == 4, "换秒就恢复配额")
+			local got = sink.Got()
+			expect(
+				got[4].fields.rateDropped == 3,
+				`被限速丢掉的条数要随下一条说出来，实际 {tostring(
+					got[4].fields.rateDropped
+				)}`
+			)
+			expect(Filter.Stats().rateSuppressed == 3, "累计账目一致")
+			Neon.Info("spam", "clean")
+			expect(sink.Got()[5].fields.rateDropped == nil, "消费过就清零，不许重复计")
+		end,
+	},
+	{
+		name = "W4·一秒内 1000 条相同消息只输出 1 条并带次数",
+		run = function()
+			Neon.SetClock(function()
+				return 500
+			end)
+			Filter.SetRepeatWindow(1)
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			for _ = 1, 1000 do
+				Neon.Info("spam", "boom")
+			end
+			expect(#sink.Got() == 1, `折叠后只该投递一条，实际 {#sink.Got()}`)
+			expect(Filter.Stats().repeatSuppressed == 999, "折叠次数单列")
+			Neon.Info("spam", "boom 2")
+			local got = sink.Got()
+			expect(#got == 2, "换一句才把次数随它带出去")
+			expect(
+				got[2].fields.repeated == 999,
+				`下一条要带 repeated=999，实际 {tostring(got[2].fields.repeated)}`
+			)
+			expect(Filter.Stats().repeatSuppressed == 999, "次数消费掉之后不再重复计")
+		end,
+	},
+	{
+		name = "W4·折叠只认同频道 + 同级别 + 同正文，别的记录一来就把链打断",
+		run = function()
+			Neon.SetClock(function()
+				return 700
+			end)
+			Filter.SetRepeatWindow(5)
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			Neon.Info("a", "same")
+			Neon.Info("b", "same")
+			Neon.Warn("a", "same")
+			Neon.Info("a", "other")
+			Neon.Info("a", "other")
+			expect(#sink.Got() == 4, "换了频道/级别/正文的都不算重复")
+			expect(Filter.Stats().repeatSuppressed == 1, "只有最后一次与上一条完全相同")
+		end,
+	},
+	{
+		name = "W4·折叠优先于限速：一条不许被计两次",
+		run = function()
+			Neon.SetClock(function()
+				return 800
+			end)
+			Filter.SetRepeatWindow(1)
+			Filter.SetRate(1)
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			for _ = 1, 5 do
+				Neon.Info("c", "x")
+			end
+			local stats = Filter.Stats()
+			expect(#sink.Got() == 1, "投递一条")
+			expect(
+				stats.repeatSuppressed == 4 and stats.rateSuppressed == 0,
+				`四条都记在折叠名下，实际 repeat={stats.repeatSuppressed} rate={stats.rateSuppressed}`
+			)
+		end,
+	},
+	{
+		name = "W4·Neon.Enabled 与实际投递一致，且不消费配额",
+		run = function()
+			Filter.SetMinimumLevel("warn")
+			Filter.SetChannelRate("c", 1)
+			local passes = 0
+			for _ = 1, 50 do
+				if Neon.Enabled("warn", "c") then
+					passes += 1
+				end
+			end
+			expect(passes == 50, "守卫的判断要发射路径一致")
+			expect(Neon.Enabled("info", "c") == false, "低于门槛的一律 false")
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			Neon.Warn("c", "one")
+			expect(#sink.Got() == 1, "50 次探测没吃掉配额")
+			expect(Filter.Stats().rateSuppressed == 0, "守卫不许动限速的账")
+		end,
+	},
+	{
+		name = "W4·配置校验：非法值抛错，且抛错的调用一项都不生效",
+		run = function()
+			local before = Filter.Options()
+			expectFails(function()
+				Filter.SetMinimumLevel("notice")
+			end, "未登记的级别必须抛错", "未登记的级别")
+			expectFails(function()
+				Filter.SetRate(-1)
+			end, "负数上限")
+			expectFails(function()
+				Filter.SetRate(2.5)
+			end, "小数上限")
+			expectFails(function()
+				Filter.SetRate(math.huge)
+			end, "+inf 不是合法上限")
+			expectFails(function()
+				Filter.SetRepeatWindow(0 / 0)
+			end, "nan 不是合法窗口")
+			expectFails(function()
+				Filter.SetChannelRate("a\nb", 3)
+			end, "频道名归同一份判定管", "频道名")
+			expectFails(function()
+				Filter.SetChannelMinimum("c", "fatal")
+			end, "每频道门槛也要校验")
+			local after = Filter.Options()
+			expect(
+				after.minLevel == before.minLevel
+					and after.rate == before.rate
+					and after.repeatWindow == before.repeatWindow,
+				"七次抛错不能留下半套新配置"
+			)
+		end,
+	},
+	{
+		name = "W4·Options 与 Stats 的快照都是冻结的",
+		run = function()
+			expectFails(function()
+				(Filter.Options() :: any).rate = 9
+			end, "配置快照必须冻结：能被随手改的快照就是第二套配置")
+			expectFails(function()
+				(Filter.Stats() :: any).admitted = 9
+			end, "账目快照也要冻结")
+		end,
+	},
+	{
+		name = "W4·频道多过跟踪上限时退化成只走全局门槛：日志不许丢",
+		run = function()
+			Neon.SetClock(function()
+				return 900
+			end)
+			Filter.SetChannelRate("first", 1) -- 让过滤器开着，且不落到全局快路径
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			for index = 1, 260 do
+				Neon.Info("ch" .. index, "x")
+			end
+			local stats = Filter.Stats()
+			expect(
+				#sink.Got() == 260,
+				`一条都不该因为「频道太多」而消失，实际 {#sink.Got()}`
+			)
+			expect(
+				stats.trackedChannels > 0 and stats.untrackedChannels > 0,
+				"退化要在账目里看得见"
+			)
+		end,
+	},
+	{
+		name = "W4·Filter.Reset 复位配置与账目，但不碰输出端注册表",
+		run = function()
+			Filter.SetMinimumLevel("error")
+			Filter.SetRepeatWindow(2)
+			Filter.SetRate(5)
+			local sink = collector("cap")
+			Neon.AddSink(sink)
+			Filter.Reset()
+			local options = Filter.Options()
+			expect(
+				options.minLevel == "trace" and options.rate == 0 and options.repeatWindow == 0,
+				"三项都回默认"
+			)
+			expect(Sink.Count() == 1, "注册表是 Sink.Reset() 的活，Filter.Reset 不许越界")
+			expect(Filter.Stats().admitted == 0, "账目归零")
+			Neon.Info("c", "passes again")
+			expect(#sink.Got() == 1, "复位后一切照打")
 		end,
 	},
 }
