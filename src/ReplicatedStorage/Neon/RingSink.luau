@@ -23,8 +23,8 @@ export type Ring = Sink.Sink & {
 	Records: () -> { Record.Record },
 	Count: () -> number,
 	Capacity: () -> number,
-	Written: () -> number,
-	Dropped: () -> number,
+	Written: () -> number, -- 累计收到过几条
+	Dropped: () -> number, -- 累计被覆盖 + 无处可存几条（不随 Reset 回退）
 	Reset: () -> number,
 }
 
@@ -59,7 +59,8 @@ function RingSink.New(capacity: number, name: string?): Ring
 	local capacityValue = capacity :: number
 	local count = 0 -- 当前存了多少条（<= capacity）
 	local cursor = 0 -- 最新一条所在下标（1 基）
-	local written = 0 -- 收过多少条（含被覆盖掉的）
+	local written = 0 -- 累计收到过几条（不随 Reset 回退）
+	local dropped = 0 -- 被覆盖掉 + 无处可存的条数
 
 	local self: Ring = {
 		name = ringName :: string,
@@ -73,17 +74,22 @@ function RingSink.New(capacity: number, name: string?): Ring
 			)
 			written += 1
 			if capacityValue == 0 then
+				dropped += 1 -- 一条也没地方存：全都是丢的
 				return
 			end
 			cursor += 1
 			if cursor > capacityValue then
 				cursor = 1
 			end
-			buffer[cursor] = _record
 			if count < capacityValue then
 				count += 1
+			else
+				-- 写满之后每次写入覆盖一格，那才是「丢了」。
+				-- 早先写成 `written - count`，于是 `Reset()` 清掉的条目也被算成丢失 ——
+				-- 自检里「清完再写一条，Dropped 应为 0」那例把它抓住了。
+				dropped += 1
 			end
-			-- count 已达上限时，被覆盖那条就是 Dropped 的那一条。
+			buffer[cursor] = _record
 		end,
 		Count = function(): number
 			return count
@@ -95,7 +101,7 @@ function RingSink.New(capacity: number, name: string?): Ring
 			return written
 		end,
 		Dropped = function(): number
-			return written - count
+			return dropped
 		end,
 		Records = function(): { Record.Record }
 			local out: { Record.Record } = table.create(count)
@@ -122,6 +128,8 @@ function RingSink.New(capacity: number, name: string?): Ring
 			end
 			count = 0
 			cursor = 0
+			-- written / dropped 都是**累计**口径，不随 Reset 回退：Reset 是「清空现存内容」，
+			-- 不是「这个缓冲从没被用过」。要全量归零就再造一个。
 			return cleared
 		end,
 	}
