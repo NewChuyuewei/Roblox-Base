@@ -37,6 +37,14 @@ local NAMES: { Level } = { "trace", "debug", "info", "warn", "error" }
 -- 可变表字段上的字面量类型会被推断放大，落到带标注的局部再摊平也一样（`types` 门禁两轮都
 -- 报在同一条 `Record.New(Level.Info, ...)` 上）。所以不要指望签名上的联合类型替你看住这里，
 -- 真正的大门是 `Level.Rank`：不在表里的名字当场抛错。`Record.New` 因此收 `any` 再校验。
+--
+-- 同一个坑还有下半截（`P2.W4` 的 types 门禁抓的）：`local TRACE = Level.Trace :: Level.Level`
+-- **也**不行 —— 没有类型标注的 local 会把 cast 的结果再摊平一次，下一行 `Level.Rank(TRACE)`
+-- 照样红。标注与收窄要同时占住：`local TRACE: Level.Level = Level.Trace :: Level.Level`，
+-- 之后各处直接用 `TRACE`，不必每处重复写 cast（重复的那份迟早有一处漏掉）。
+-- 与上面那句区分开：那句说的是「把带标注的局部**写进表字段**」会被摊平，这句说的是
+-- 「把表字段**读进无标注的 local**」同样被摊平 —— 两半合起来才是完整规则：只有显式标注
+-- 的那个名字（`local x: Level.Level = …`）保得住联合类型。
 local levelTrace: Level = "trace"
 local levelDebug: Level = "debug"
 local levelInfo: Level = "info"
