@@ -5,7 +5,7 @@
 --
 -- 门面上只放两类东西：**发射**（`Log` + 五个级别简写 + `Channel`）与**接线**
 -- （`AddSink` / `RemoveSink` / `SetClock` / `Stats` / `Reset`），外加两个只读的接缝
--- （`Neon.Format` / `Neon.Filter`）与一个守卫 `Neon.Enabled`。级别定义、记录结构、
+-- （`Neon.Format` / `Neon.Filter` / `Neon.Command`）与一个守卫 `Neon.Enabled`。级别定义、记录结构、
 -- 环形缓冲各自住在邻居模块；这里转出的 `Neon.Level` 等字段是**同一张表的引用**而不是副本
 -- —— 抄一份出来就有了第二套真相，改一处忘另一处，两边就开始漂移。
 --
@@ -23,6 +23,7 @@ local Channel = require(script.Parent.Channel)
 local Publish = require(script.Parent.Publish)
 local Format = require(script.Parent.Format)
 local Filter = require(script.Parent.Filter)
+local Command = require(script.Parent.Command)
 
 local Neon = {}
 
@@ -32,6 +33,7 @@ Neon.Sink = Sink
 Neon.RingSink = RingSink
 Neon.Format = Format
 Neon.Filter = Filter
+Neon.Command = Command
 
 --[=[
 	打印入口。`level` 可以是级别名或可规范化的字符串（`"INFO"` 可用，`"notice"` 抛错）。
@@ -141,6 +143,9 @@ function Neon.Reset(): ()
 	Publish.Reset()
 	Filter.Reset()
 	Record.SetClock(nil)
+	-- 命令注册表**不在这里清**：那是宿主接线期的东西（W6/W7 注册一次，全程有效）。
+	-- 把它并进「夹具复位」，症状会是「跑了一次测试之后服务器的命令全没了」——
+	-- 复位范围每宽一寸，误伤面就大一寸。要清自己的账用 `Command.Reset()`。
 end
 
 return Neon

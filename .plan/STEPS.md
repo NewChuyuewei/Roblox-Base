@@ -675,3 +675,19 @@ stylua --config-path stylua.toml --check Deuterium TritiumSQL \
 - 两处护栏：`Neon.Enabled(level, channel?)` 只读门槛、**不消费配额**（探测一次就吃掉一格的话，加守卫反而让日志更少）；每频道状态最多跟踪 256 个频道，超出的退回只走全局门槛并把 `untrackedChannels` 如实报出来 —— 频道名可以是 `player:78` 这种按人现造的，不设上限就是「日志内容决定内存占用」。
 - **CI 反馈**：`test` 一次过（11 例的期望值全部手算：限速那条推的是「同秒第 4、5 条 + 100.9 的同一秒第 6 条 → 3 条被限速」，所以计数字段是 `rateDropped = 3`）。`types` 打回两轮，同一个根因的上下半截：`Level.Trace` 这类常量字段在调用点是 `string`（`Level.luau` 早就记过），我按老办法写 `local TRACE = Level.Trace :: Level.Level` 仍红 —— **没有标注的 local 会把 cast 的结果再摊平一次**。修法两边都占住：`local TRACE: Level.Level = Level.Trace :: Level.Level`，之后各处用 `TRACE` 不再重复 cast。这条已回写进 `Level.luau` 的文件头，免得第三次踩。
 - 待办：`P2.W5` 命令 · `P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 仍是 **20** → ≤3）。上一轮记下的两个待决项（`Level.Describe` 的 UTF-8 边界、纯数组的渲染风格）仍未做。
+
+
+---
+
+## 2026-11-21 · P2.W5（`Neon` 命令系统）
+
+- 新增 `src/ReplicatedStorage/Neon/Command.luau`（实测 **639** 行，预算 0.7k）：`Register` / `Remove` / `Names` / `Count` / `Complete` / `Help` / `Parse` / `Run` / `SetPermissionHook` / `Stats` / `Reset`。核心 10 模块 **1719 → 2371** 行，`SelfTest.luau` **1075 → 1506** 行、**48 → 63** 例（W5 新增 **15** 例）。
+- 判据落点：引号不闭合、缺参数、类型不符、`nan`/`inf`、参数过多 → 全部返回一行错误文本而不抛错（`第 6 字节`这种位置要能给出来，未知命令顺带列前缀候选）；越权与「钩子自己抛错」都按拒绝处理；`help` 与补全从注册表生成并按键排序（与注册顺序无关，两次调用逐字节相同）；handler 抛错转错误文本且其余命令照跑；三类失败分开记账（`rejected` / `denied` / `errored`）。
+- 解析单独导出 `Command.Parse`：「畸形输入不抛错」这条判据属于**纯函数**层 —— 手算期望值才不会因为顺手跑了一条命令而把 `Stats()` 的账改脏；`P2.W7` 的控制台在回车之前也先用它判断这一行值不值得执行。
+- 三处形状决定（详版在 `Neon/README.md` 决定 10–12）：运行不抛、注册必抛；错误文本按**尾巴**截断（`errorText`，控制字符整类换空格 + 上限 240 字节 + 掐掉切坏的 UTF-8 续接字节）；`Neon.Reset()` 不清命令注册表。
+- **CI 反馈**（run `44913132363` 最终 5/5 全绿）：`test` 一次过，15 例的期望值全部手算（`第 6 字节`、`alpha,help,mid,zeta`、`hi bob`、`<1 个参数>`）。`types` 打回两轮，都不是老毛病：
+  1. `kind: "string" | "number" | "boolean"` 在 8 个注册点各报一条同形错误 —— 字符串字面量嵌在**表字面量**里就被摊平成 `string`，而期望类型穿过 `{ArgSpec}?` 这种可选 union 字段时不会传到嵌套元素。改成「类型收 `string` + 注册期用 `KINDS` 挡」（与 `Record.New(level: any)` 同一口径），`ArgKind` 只作为对外别名留下。
+  2. 兄弟元素字段不齐的 args 数组：Luau 是在**兄弟之间**统一元素类型（不是拿 `ArgSpec` 逐个判）→ 少一个字段报 missing field；而按直觉把 `default = nil` 抄齐更糟 —— 第一个元素的 `default` 被定成类型 `nil`，第二个的 `default = 1` 就「Expected this to be exactly nil, but got number」。可靠写法只有一种：给数组本身显式标注 `local specs: { Command.ArgSpec } = { ... }`。
+- 校准一条旧口径：`{ [string]: any }?` 的局部配 `args ~= nil and args.k` **能**收窄（本轮 CI 绿）。上一轮记的「已赋值的可选局部不收窄」只适用于 `{ T }` 那种数组形状，别当万能挡箭牌用。
+- 两处工具性坑（都是这一轮现场撞上的）：`write_file` 在 `--[=[ ]=]` 文档块里留下 19 行字面 `\t`；Python 补丁串里的 `"\128"` 被当成八进制 `\12` + 字面 `8`，把一条中文注释从中间截成两行 —— 症状是 stylua 报 `unexpected token \`8\`，expected \`end\` to close function body block` 这种完全读不出原因的形态。写含字节转义的补丁一律用 raw 串或 `\xNN`。
+- 待办：`P2.W6` `Host/StdSink` · `P2.W7` 控制台界面 · `P2.W8` 迁移（基线 `OUTSIDE` 仍是 **20** → ≤3）。两个老待决项（`Level.Describe` 的 UTF-8 边界、纯数组渲染风格）仍未做；`Level.Describe` 按头截 40 字节这件事现在只影响报错可读性，`Command` 已经绕开它。

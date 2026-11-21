@@ -13,6 +13,7 @@ local Sink = require(script.Parent.Sink)
 local RingSink = require(script.Parent.RingSink)
 local Format = require(script.Parent.Format)
 local Filter = require(script.Parent.Filter)
+local Command = require(script.Parent.Command)
 local Neon = require(script.Parent.Neon)
 
 local SelfTest = {}
@@ -1049,6 +1050,433 @@ local cases: { { name: string, run: () -> () } } = {
 			expect(#sink.Got() == 1, "复位后一切照打")
 		end,
 	},
+
+	-- ---------- P2.W5：命令系统 ----------
+	{
+		name = "W5·注册后能跑，handler 拿到按名字绑定好的参数",
+		run = function()
+			local seen: { [string]: any }? = nil
+			Command.Register("sethp", {
+				help = "改血量",
+				args = {
+					{ name = "target", kind = "string" },
+					{ name = "value", kind = "number" },
+				},
+			}, function(context: Command.Context): string?
+				seen = context.args
+				return `已把 {context.args.target} 设为 {tostring(context.args.value)}`
+			end)
+			local result = Command.Run("sethp player1 42")
+			expect(result.ok == true, `应当跑通，实际 error = {tostring(result.error)}`)
+			expect(result.name == "sethp", "结果里要带上跑的是哪条命令")
+			local args = seen
+			expect(args ~= nil and args.target == "player1", "字符串参数原样交出去")
+			expect(args ~= nil and args.value == 42, 'number 参数必须真的转成了数（不是 "42"）')
+			expect(
+				result.output == "已把 player1 设为 42",
+				`handler 的返回要当输出交出，实际 {tostring(result.output)}`
+			)
+			expect(Command.Stats().succeeded == 1, "成功单独记一笔")
+		end,
+	},
+	{
+		name = "W5·引号不闭合返回错误文本而不是抛错，并给出血位置",
+		run = function()
+			Command.Register(
+				"echo",
+				{ help = "回显", args = { { name = "text", kind = "string" } } },
+				function(context: Command.Context): string?
+					return tostring(context.args.text)
+				end
+			)
+			local result = Command.Run([[echo "abc]])
+			expect(result.ok == false, "敲错引号必须被拒，而不是把调用栈甩在人脸上")
+			local text = tostring(result.error)
+			expect(
+				string.find(text, "引号没有闭合", 1, true) ~= nil,
+				`要说是引号问题，实际 {text}`
+			)
+			expect(string.find(text, "第 6 字节", 1, true) ~= nil, `位置要给出来，实际 {text}`)
+		end,
+	},
+	{
+		name = "W5·缺参数与类型不符都点名到具体是哪一项",
+		run = function()
+			-- 字段不齐的兄弟元素，要给**数组本身**一个显式标注，让 Luau 逐个元素对着 `ArgSpec` 判。
+			-- 不标注时元素类型是在兄弟之间统一的：少一个字段报「missing field」；而把 `default = nil`
+			-- 抄齐更糟 —— 第一个元素的 `default` 被定成 `nil` 这个类型，第二个的 `default = 1` 反倒不
+			-- 兼容。两种形状都是这轮 types 门禁实测出来的，别凭直觉挑一种。
+			local greetArgs: { Command.ArgSpec } = {
+				{ name = "who", kind = "string" },
+				{ name = "times", kind = "number", optional = true, default = 1 },
+			}
+			Command.Register(
+				"greet",
+				{ help = "打招呼", args = greetArgs },
+				function(context: Command.Context): string?
+					return ("hi "):rep(tonumber(context.args.times) or 1) .. tostring(context.args.who)
+				end
+			)
+			local missing = Command.Run("greet")
+			expect(
+				missing.ok == false and string.find(tostring(missing.error), "who", 1, true) ~= nil,
+				"缺的必填项要点名"
+			)
+			local bad = Command.Run("greet bob lots")
+			expect(string.find(tostring(bad.error), "times", 1, true) ~= nil, "类型不符要点名参数")
+			expect(
+				string.find(tostring(bad.error), "需要一个数", 1, true) ~= nil,
+				"要说清要什么类型"
+			)
+			local defaulted = Command.Run("greet bob")
+			expect(
+				defaulted.ok == true and defaulted.output == "hi bob",
+				`可选项要吃默认值，实际 {tostring(defaulted.output)}`
+			)
+			local tooMany = Command.Run("greet bob 2 3")
+			expect(
+				tooMany.ok == false and string.find(tostring(tooMany.error), "参数过多", 1, true) ~= nil,
+				"多出来的参数不能静默丢掉"
+			)
+		end,
+	},
+	{
+		name = "W5·nan / inf 不许当数字用（tonumber 认它们，控制台不该放行）",
+		run = function()
+			Command.Register(
+				"num",
+				{ help = "收一个数", args = { { name = "v", kind = "number" } } },
+				function(): string?
+					return "ok"
+				end
+			)
+			local badInputs = { "nan", "inf", "-inf", "1e999" }
+			for index = 1, #badInputs do
+				local result = Command.Run("num " .. badInputs[index])
+				expect(result.ok == false, `{badInputs[index]} 不能当数字用，它却通过了`)
+			end
+			expect(Command.Run("num 1e3").ok == true, "正常的科学计数法要过")
+			expect(Command.Run("num -0.5").ok == true, "负小数要过")
+		end,
+	},
+	{
+		name = "W5·引号里的空格留着，反斜杠只用来塞引号本身",
+		run = function()
+			Command.Register(
+				"echo",
+				{ help = "回显", args = { { name = "text", kind = "string" } } },
+				function(context: Command.Context): string?
+					return tostring(context.args.text)
+				end
+			)
+			expect(Command.Run([[echo "a  b"]]).output == "a  b", "引号内的两个空格要留着")
+			expect(
+				Command.Run([[echo "say \"hi\""]]).output == 'say "hi"',
+				"反斜杠要能塞进引号本身"
+			)
+			expect(
+				Command.Run([[echo ""]]).output == "",
+				"空引号是一个空字符串参数，不是少一个参数"
+			)
+			expect(
+				Command.Run([[echo a"b c"]]).output == "ab c",
+				"引号段可以和裸片段拼在同一个词里"
+			)
+		end,
+	},
+	{
+		name = "W5·未知命令不抛错，还把前缀候选给出来",
+		run = function()
+			Command.Register("tp", "传送", function(): string?
+				return nil
+			end)
+			local result = Command.Run("t")
+			local text = tostring(result.error)
+			expect(
+				result.ok == false and string.find(text, "未知命令 t", 1, true) ~= nil,
+				"要说清哪条没找到"
+			)
+			expect(
+				string.find(text, "tp", 1, true) ~= nil,
+				`前缀对得上的候选要顺手列出来，实际 {text}`
+			)
+			local empty = Command.Run("   ")
+			expect(
+				empty.ok == false and string.find(tostring(empty.error), "空输入", 1, true) ~= nil,
+				"只有空格也算空输入，不许当成空命令名去查表"
+			)
+		end,
+	},
+	{
+		name = "W5·handler 抛错被包成错误文本，其余命令照样能跑",
+		run = function()
+			Command.Register("ping", "探活", function(): string?
+				return "pong"
+			end)
+			Command.Register("boom", "会抛错的命令", function(): string?
+				error("内部炸了")
+			end)
+			local result = Command.Run("boom")
+			expect(result.ok == false and result.error ~= nil, "抛错不能带走调用方")
+			expect(
+				string.find(tostring(result.error), "内部炸了", 1, true) ~= nil,
+				"原始错误文本要留着，别只说「失败了」"
+			)
+			expect(Command.Run("ping").output == "pong", "一条坏命令不许把注册表带坏")
+			local stats = Command.Stats()
+			expect(
+				stats.errored == 1 and stats.succeeded == 1,
+				`三类失败要分开记账：errored={stats.errored} succeeded={stats.succeeded}`
+			)
+			-- 超长错误必须**留下尾巴**：Luau 给 `error()` 的返回值加的路径前缀比原因长，按头截断
+			-- 会把原因整个切掉。这一条就是 W5 自检第一次跑 CI 时的真实失败，判据要留在用例里。
+			Command.Register("longboom", "尾巴型错误", function(): string?
+				error(string.rep("x", 300) .. "真正的原因")
+			end)
+			local longText = tostring(Command.Run("longboom").error)
+			expect(
+				string.find(longText, "真正的原因", 1, true) ~= nil,
+				`超长错误要留尾巴，实际开头是 {string.sub(longText, 1, 60)}`
+			)
+			expect(
+				string.find(longText, "…", 1, true) ~= nil,
+				"截过要标出来，别让人以为那是全文"
+			)
+			expect(#longText < 400, `截断要有上限，实际 {#longText} 字节`)
+			expect(string.find(longText, "\n", 1, true) == nil, "错误文本必须仍是一行")
+		end,
+	},
+	{
+		name = "W5·权限钩子拒绝时 handler 一次都不许被叫到",
+		run = function()
+			local calls = 0
+			Command.Register("wipe", "危险操作", function(): string?
+				calls += 1
+				return "done"
+			end)
+			Command.SetPermissionHook(function(caller: any, name: string): (boolean, string?)
+				if caller == "console" then
+					return true, nil
+				end
+				return false, `不能执行 {name}`
+			end)
+			local denied = Command.Run("wipe", "student")
+			expect(
+				denied.ok == false and string.find(tostring(denied.error), "未授权", 1, true) ~= nil,
+				"越权要挡住"
+			)
+			expect(
+				string.find(tostring(denied.error), "不能执行 wipe", 1, true) ~= nil,
+				"钩子给的理由要原样交出去，别被咽下去"
+			)
+			expect(calls == 0, "被拒绝的命令不能已经跑过了")
+			expect(Command.Stats().denied == 1, "越权单独记一笔")
+			expect(Command.Run("wipe", "console").ok == true and calls == 1, "放行时要真的跑")
+			Command.SetPermissionHook(nil)
+			expect(Command.Run("wipe", "anyone").ok == true, "传 nil 复原成一律允许")
+		end,
+	},
+	{
+		name = "W5·钩子自己抛错按拒绝处理（fail closed）",
+		run = function()
+			local calls = 0
+			Command.Register("danger", "钩子会炸的命令", function(): string?
+				calls += 1
+				return nil
+			end)
+			Command.SetPermissionHook(function(_caller: any, _name: string): (boolean, string?)
+				error("钩子起不来")
+				-- 到不了这里。`error` 在类型层不算返回值，所以标注了多返回值的函数仍要留一条
+				-- return，否则 types 门禁会说「函数必须返回 (boolean, string?)」。
+				return false, nil
+			end)
+			local result = Command.Run("danger")
+			expect(result.ok == false, "钩子坏了必须拒绝，不能放行")
+			expect(calls == 0, "「安全检查起不来就当通过」是反过来的默认值")
+			expect(
+				string.find(tostring(result.error), "按拒绝处理", 1, true) ~= nil,
+				"错误文本要说清为什么被拒"
+			)
+		end,
+	},
+	{
+		name = "W5·重复注册抛错；Remove 如实返回布尔；Reset 之后内置 help 还在",
+		run = function()
+			Command.Register("dup", "一", function(): string?
+				return nil
+			end)
+			expectFails(
+				function()
+					Command.Register("dup", "二", function(): string?
+						return nil
+					end)
+				end,
+				"同名命令必须抛错：静默覆盖会让「两处都注册了」完全没有痕迹",
+				"已注册"
+			)
+			expectFails(function()
+				Command.Register("DUP", "三", function(): string?
+					return nil
+				end)
+			end, "大小写撞车也算撞车", "大小写不敏感")
+			expect(Command.Remove("nope") == false, "摘不掉要如实返回 false")
+			expect(Command.Remove("dup") == true, "摘掉返回 true")
+			expect(Command.Run("dup").ok == false, "摘掉之后就该是未知命令")
+			expect(
+				Command.Run("help").ok == true,
+				"内置 help 是注册进去的，不是硬编码的第二份"
+			)
+			Command.Reset()
+			expect(Command.Count() == 1, `复位后只剩内置 help，实际 {Command.Count()}`)
+			expect(Command.Run("help").ok == true, "复位不能把 help 一起清掉")
+		end,
+	},
+	{
+		name = "W5·坏 spec 在注册期就挡下，不留到 Run 才发现",
+		run = function()
+			local orderArgs: { Command.ArgSpec } = {
+				{ name = "a", kind = "string", optional = true },
+				{ name = "b", kind = "string" },
+			}
+			expectFails(function()
+				Command.Register(
+					"badkind",
+					{ args = { { name = "v", kind = "int" } } }, -- 非法 kind 由注册期挡下
+					function(): string?
+						return nil
+					end
+				)
+			end, "kind 只能是三种之一", "kind")
+			expectFails(function()
+				Command.Register("order", {
+					-- 显式标注的理由见上面 `greet` 那条注释。
+					args = orderArgs,
+				}, function(): string?
+					return nil
+				end)
+			end, "必填排在可选之后，按位置绑定时是无解的", "必填")
+			expectFails(function()
+				Command.Register("nohandler", "说明", 1 :: any)
+			end, "handler 必须是函数")
+			expectFails(function()
+				Command.Register("na\0me", "说明", function(): string?
+					return nil
+				end)
+			end, "命令名归同一份判定管", "命令名")
+			expectFails(function()
+				Command.Register("repeat", {
+					args = {
+						{ name = "v", kind = "string" },
+						{ name = "v", kind = "number" },
+					},
+				}, function(): string?
+					return nil
+				end)
+			end, "参数名不能重复", "重复")
+			expectFails(function()
+				Command.SetPermissionHook(1 :: any)
+			end, "钩子只收函数")
+			expect(Command.Count() == 1, "六次抛错不能留下半条新命令")
+		end,
+	},
+	{
+		name = "W5·补全候选与注册顺序无关，两次调用逐字节相同",
+		run = function()
+			Command.Register("zeta", "z", function(): string?
+				return nil
+			end)
+			Command.Register("alpha", "a", function(): string?
+				return nil
+			end)
+			Command.Register("mid", "m", function(): string?
+				return nil
+			end)
+			local first = table.concat(Command.Complete(""), ",")
+			expect(first == "alpha,help,mid,zeta", `候选要按字典序排，实际 {first}`)
+			expect(
+				table.concat(Command.Complete(""), ",") == first,
+				"补全列表是给人 Tab 用的，顺序必须稳"
+			)
+			expect(table.concat(Command.Complete("M"), ",") == "mid", "前缀匹配大小写不敏感")
+			expect(#Command.Complete("zzz") == 0, "没有候选就返回空表，不要猜一个")
+		end,
+	},
+	{
+		name = "W5·help 文本从注册表生成，并把参数形状带出来",
+		run = function()
+			Command.Register("alpha", {
+				help = "甲命令",
+				args = { { name = "n", kind = "number", optional = true, default = 1 } },
+			}, function(): string?
+				return nil
+			end)
+			local all = Command.Run("help")
+			local text = tostring(all.output)
+			expect(all.ok == true, "内置 help 要能跑")
+			expect(
+				string.find(text, "alpha", 1, true) ~= nil and string.find(text, "甲命令", 1, true) ~= nil,
+				"名字与说明都要在"
+			)
+			expect(string.find(text, "help", 1, true) ~= nil, "help 自己也在表里")
+			expect(
+				string.find(text, "<1 个参数>", 1, true) ~= nil,
+				`有参数的要标出形状，实际 {text}`
+			)
+			local detail = tostring(Command.Run("help alpha").output)
+			expect(
+				string.find(detail, "n: number", 1, true) ~= nil,
+				`单条说明要给参数类型，实际 {detail}`
+			)
+			expect(
+				string.find(detail, "可选", 1, true) ~= nil
+					and string.find(detail, "默认 1", 1, true) ~= nil,
+				"可选项与默认值都要说"
+			)
+			expect(
+				string.find(tostring(Command.Run("help nothing").output), "未知命令", 1, true) ~= nil,
+				"help 查不到也要说清楚"
+			)
+		end,
+	},
+	{
+		name = "W5·Neon.Reset 不清命令注册表（复位边界要有人守着）",
+		run = function()
+			Command.Register("hostonly", "宿主注册一次、全程有效", function(): string?
+				return "ok"
+			end)
+			Neon.Reset()
+			expect(
+				Command.Count() == 2,
+				"复位日志状态不该把命令一起端走：那会让服务器上的命令凭空消失"
+			)
+			expect(Command.Run("hostonly").ok == true, "复位后命令仍可调用")
+			expect(
+				Neon.SinkNames()[1] == nil,
+				"输出端确实被 Neon.Reset 清了（对照：命令是刻意不清的）"
+			)
+		end,
+	},
+	{
+		name = "W5·解析器是纯函数：同一行文本两次切分结果相同",
+		run = function()
+			-- 跑 `Run` 也能验解析，但那会把账记进计数里；解析单独有一个入口，
+			-- 「两次切分相同」这条判据才只属于解析这一件事。
+			local line = [[  sethp "a  b" 42  ]]
+			local first = Command.Parse(line)
+			local second = Command.Parse(line)
+			expect(
+				table.concat(first.tokens, "|") == table.concat(second.tokens, "|"),
+				"两次切分必须逐字节相同"
+			)
+			expect(#first.tokens == 3, `前后空白不该产生空词，实际 {#first.tokens} 个`)
+			expect(
+				first.tokens[1] == "sethp" and first.tokens[2] == "a  b" and first.tokens[3] == "42",
+				"词的内容"
+			)
+			expect(first.error == nil, "这行没有错误")
+			expect(Command.Parse('a " b').error ~= nil, "没闭合的引号要报错")
+		end,
+	},
 }
 
 --[=[ 跑全部用例，返回是否全过。CI 的 `test` 阶段按返回值定成败。]=]
@@ -1059,6 +1487,9 @@ function SelfTest.RunAll(): boolean
 		-- 上限是模块级配置，用例改过就必须复位：否则「同一记录两次渲染相同」这类断言会读到
 		-- 上一个用例留下的截断位，症状是偶发失败、单跑又都对 —— 最难查的那一类。
 		Format.Reset()
+		-- 命令注册表同样是模块级状态：上一例注册的命令留在这一例里，「未知命令」这类断言就失去
+		-- 意义了。（`Neon.Reset()` 刻意不清它 —— 那条边界由 `W5·Neon.Reset` 这一例守着。）
+		Command.Reset()
 		local ok, err = protect(case.run)
 		if ok then
 			print(`  [Neon] PASS  {case.name}`)

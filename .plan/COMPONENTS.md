@@ -39,7 +39,7 @@ L0 纯库 · 核心 5k 行 · 深度：完整
 
 - **第一刀**：一条打印经 Core → Filter → 两个 Sink（环形缓冲 + 标准输出），在 Lune 里断言缓冲内容；替换掉 `Debug.luau` 的一处调用。
 - **先决**：界面部分等 `P1.W3`（`Host/` 规则进门禁）。完成后把 `carbon-deps-baseline.txt` 里 17 条 `Debug.luau` 遗留清零。
-- **进度**：`P2.W1`–`W4` 已落（PR #11 · #12 · #13 加固 · #14）。核心 9 个模块实测 **1719** 行（预算 2.6k），`SelfTest.luau` **1075** 行 **48** 例判据断言，由 `tests/run.luau` 的 `Neon.Core` 套件在 Lune 里跑。接缝清单与已钉住的设计决定（九条）见 `src/ReplicatedStorage/Neon/README.md`。
+- **进度**：`P2.W1`–`W5` 已落（PR #11 · #12 · #13 加固 · #14 · #15）。核心 10 个模块实测 **2371** 行（预算 3.3k），`SelfTest.luau` **1506** 行 **63** 例判据断言，由 `tests/run.luau` 的 `Neon.Core` 套件在 Lune 里跑。接缝清单与已钉住的设计决定（十二条）见 `src/ReplicatedStorage/Neon/README.md`。
 
 ## 2. `Platinum` — 数学库
 
