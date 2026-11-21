@@ -131,7 +131,13 @@ function Sink.Broadcast(record: Record.Record): { delivered: number, failed: num
 	for index = 1, count do
 		local sink = registry[index]
 		if sink ~= nil then
-			local ok, err = pcall(sink.Write, record)
+			-- 闭包显式 `return nil`：直接 pcall(sink.Write, record) 的话，类型系统按
+			-- 「Write 不返回值」把 pcall 的结果收窄成只有一个 boolean，多接一个 err
+			-- 就是类型错误 —— 而错误文本恰恰是这道隔离层唯一有用的输出。
+			local ok, err = pcall(function(): any
+				sink.Write(record)
+				return nil
+			end)
 			if ok then
 				delivered += 1
 			else

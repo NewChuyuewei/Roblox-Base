@@ -19,8 +19,19 @@ local function expect(condition: boolean, what: string): ()
 	assert(condition, what)
 end
 
+-- `pcall` 的第二个返回值要能接住：直接 `pcall(run)` 而 `run` 不返回值时，类型系统把
+-- 结果收窄成只有一个 boolean，多接一个 err 就是类型错误（`types` 门禁实测）。
+-- 统一走这个包装，别在每处各写一遍闭包 —— 漏一处的症状是「错误文本变成 nil」。
+local function protect(run: () -> ()): (boolean, any)
+	local ok, err = pcall(function(): any
+		run()
+		return nil
+	end)
+	return ok, err
+end
+
 local function expectFails(run: () -> (), what: string, needle: string?): ()
-	local ok, err = pcall(run)
+	local ok, err = protect(run)
 	expect(not ok, `{what}（期望抛错，实际正常返回）`)
 	if needle ~= nil then
 		local text = tostring(err)
@@ -95,7 +106,7 @@ local cases: { { name: string, run: () -> () } } = {
 			Neon.Warn("c", "w")
 			Neon.Error("c", "e")
 			local got = sink.Got()
-			local want = { "trace", "debug", "info", "warn", "error" }
+			local want: { Level.Level } = { "trace", "debug", "info", "warn", "error" }
 			expect(#got == 5, "五条都到了输出端")
 			for index = 1, 5 do
 				expect(got[index].level == want[index], `第 {index} 条级别应为 {want[index]}`)
@@ -210,9 +221,15 @@ local cases: { { name: string, run: () -> () } } = {
 				"派生不得污染父记录器：第三条不该看到 raid 字段"
 			)
 			expect(combat.channel == "combat" and raid.channel == "combat", "频道沿用父名")
+			-- `recorder:Info()` 把记录器本身当成 message 传进来；`recorder:Info(x)` 则把 x
+			-- 塞进 extra（fields）。两种都要抛错，但抛出点不同，分开判：
+			-- 混成一条断言时，我原先「一定是 message 校验挡住」的猜测就是错的（实测先撞 fields）。
+			expectFails(function()
+				(combat :: any):Info()
+			end, "用 : 调用记录器必须当场抛错（记录器被当成 message）", "message")
 			expectFails(function()
 				(combat :: any):Info("colon call")
-			end, "记录器是闭包，用 : 调用必须当场抛错而不是静默错位", "message")
+			end, "用 : 调用且带参数时也必须抛错（参数落到 fields）")
 			expectFails(function()
 				Neon.Channel("c\n")
 			end, "建记录器时就校验频道名")
@@ -353,12 +370,21 @@ local cases: { { name: string, run: () -> () } } = {
 			Neon.Info("c", "m2")
 			expect(#ring.Records() == 0, "容量 0 不存记录")
 			expect(ring.Count() == 0 and ring.Written() == 2 and ring.Dropped() == 2, "但仍计数")
-			for _, bad in { 3.5, -1, "3" } do
-				expectFails(function()
-					RingSink.New(bad :: any)
-				end, `非法容量 {tostring(bad)} 必须抛错`)
-			end
-			-- nil 单独验：它进不了数组字面量（`for .. in {nil}` 压根不迭代，写成一组会静默少一例）
+			expectFails(
+				function()
+					RingSink.New(3.5)
+				end,
+				"小数容量必须抛错（不是四舍五入的小事，是调用方对容量的理解不一样）"
+			)
+			expectFails(function()
+				RingSink.New(-1)
+			end, "负容量必须抛错")
+			expectFails(function()
+				RingSink.New("3" :: any)
+			end, "字符串容量必须抛错")
+			-- 顺带记一笔：原先这里想用 `for _, bad in { 3.5, -1, "3", nil }` 一批测完，
+			-- 但 nil 在数组字面量里等于「没有这一项」，那一例会静默消失；混合类型还会被
+			-- 推断成 {number}。逐条写的成本是 6 行，换掉的是「少测一例而无人知晓」。
 			expectFails(function()
 				RingSink.New(nil :: any)
 			end, "缺容量必须抛错")
@@ -429,7 +455,7 @@ function SelfTest.RunAll(): boolean
 	local failures = 0
 	for _, case in cases do
 		Neon.Reset()
-		local ok, err = pcall(case.run)
+		local ok, err = protect(case.run)
 		if ok then
 			print(`  [Neon] PASS  {case.name}`)
 		else

@@ -39,8 +39,13 @@ local serial = 1
 	它意味着调用方对「容量」的理解和这里不一致，猜一下就把这个分歧留到运行时了。
 ]=]
 function RingSink.New(capacity: number, name: string?): Ring
+	-- 整数判定用 `math.floor` 比对：`math.type` 在这个 Luau 构建里不存在
+	-- （`types` 门禁与运行期一起证明：前者报 `Key 'type' not found in table 'typeof(math)'`，
+	-- 后者直接 attempt to call a nil value）。所以也不要写 `math.type`。
 	assert(
-		type(capacity) == "number" and math.type(capacity) == "integer" and capacity >= 0,
+		type(capacity) == "number"
+			and math.floor(capacity :: number) == (capacity :: number)
+			and capacity >= 0,
 		`[Neon.RingSink] capacity 必须是非负整数，收到 {Level.Describe(capacity)}`
 	)
 

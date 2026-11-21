@@ -60,6 +60,11 @@ function Record.Now(): number
 	return clock()
 end
 
+-- 共享的空表：冻结过，所以「读不到字段」与「不许写」同时成立，
+-- 也不必为每条无字段记录分配一个新表。（`copyFields` 直接用它，不绕道访问器 ——
+-- 上一版写成 `return Record.EmptyFields`，把函数本身当成了表：类型门禁当场抓住。）
+local EMPTY: Fields = table.freeze({}) :: Fields
+
 -- 时钟坏了要在构造记录时就炸，不要让一个 `nil` 时间戳漂到格式化那一层去。
 local function currentTime(): number
 	local time = clock()
@@ -72,9 +77,7 @@ end
 
 local function copyFields(fields: any): Fields
 	if fields == nil then
-		-- 共享的空表：冻结过，所以「读不到字段」与「不许写」同时成立，
-		-- 也不必为每条无字段记录分配一个新表。
-		return Record.EmptyFields
+		return EMPTY
 	end
 	assert(type(fields) == "table", `[Neon.Record] fields 必须是表，收到 {Level.Describe(fields)}`)
 	local out: Fields = {}
@@ -86,13 +89,6 @@ local function copyFields(fields: any): Fields
 		out[key] = value
 	end
 	return table.freeze(out) :: Fields
-end
-
--- 提前定义空表，让 `copyFields` 与调用方拿到的是同一个引用（可以被 `==` 断言）。
-local EMPTY: Fields = table.freeze({}) :: Fields
-
-function Record.EmptyFields(): Fields
-	return EMPTY
 end
 
 --[=[
