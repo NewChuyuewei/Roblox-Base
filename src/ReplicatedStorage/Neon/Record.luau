@@ -95,7 +95,12 @@ end
 	构造一条记录。四个参数全部当场校验，不做「宽容接受 + 悄悄修正」：
 	日志系统是最后那道防线，它自己把输入猜错了就没人发现了。
 ]=]
-function Record.New(level: Level.Level, channel: string, message: string, fields: Fields?): Record
+-- `level` 收 `any` 而不是 `Level.Level`：入口 `Neon.Log` 本来就接字符串，而 `Level.Trace`
+-- 这类**常量字段**在调用点的类型会被 Luau 放大成 `string`（可变表字段上的字面量不收窄，
+-- `:: Level` 也挡不住）—— 结果「用自家常量」反而过不了类型门禁，两轮 CI 都报在同一行。
+-- 真正的大门是下面的 `Level.Rank`：不在表里的名字当场抛。记录里的字段仍标注成
+-- `Level.Level`（见 `level :: Level.Level`），下游拿到的是收窄过的联合，没被放宽。
+function Record.New(level: any, channel: string, message: string, fields: Fields?): Record
 	-- Rank 会校验级别名；channel/message 各挡一类下游爆炸：
 	-- 频道里带换行会撕开 W3 的单行格式，message 非字符串通常是把表塞错了位置。
 	Level.Rank(level)
@@ -111,7 +116,7 @@ function Record.New(level: Level.Level, channel: string, message: string, fields
 	)
 	return table.freeze({
 		time = currentTime(),
-		level = level,
+		level = level :: Level.Level,
 		channel = channel,
 		message = message,
 		fields = copyFields(fields),
